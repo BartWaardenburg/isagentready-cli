@@ -1,0 +1,63 @@
+{
+  "name": "isagentready",
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.28.1",
+  "description": "Scan any website for AI agent readiness from your terminal — scores, grades, and recommendations across 47 checkpoints",
+  "type": "module",
+  "bin": {
+    "isagentready": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "CONTEXT.md"
+  ],
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "start": "node --enable-source-maps dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "pnpm build",
+    "release": "GITHUB_TOKEN=$(gh auth token) release-it"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bartwaardenburg/isagentready-cli.git"
+  },
+  "keywords": [
+    "cli",
+    "isagentready",
+    "ai-readiness",
+    "website-scanner",
+    "agent-readiness",
+    "ai",
+    "mcp",
+    "aeo",
+    "seo",
+    "automation",
+    "llm"
+  ],
+  "author": "Bart Waardenburg",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/bartwaardenburg/isagentready-cli/issues"
+  },
+  "homepage": "https://github.com/bartwaardenburg/isagentready-cli#readme",
+  "dependencies": {
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@release-it/conventional-changelog": "^10.0.5",
+    "@types/node": "^22.13.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "release-it": "^19.2.4",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
