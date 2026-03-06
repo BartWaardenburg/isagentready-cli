@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 
+import { createRequire } from "node:module";
 import { Command } from "commander";
-import { getScanResults, startScan, pollUntilComplete, getRankings } from "./api.js";
+import { getScanResults, startScan, pollUntilComplete, getRankings, ApiError } from "./api.js";
 import type { ScanResult } from "./api.js";
 import { formatScanResult, formatRankings, spinner } from "./format.js";
 import { validateDomain, validateUrl, ValidationError } from "./validate.js";
 import { isJsonMode, applyFieldMask } from "./output.js";
+
+const require = createRequire(import.meta.url);
+const { version: VERSION } = require("../package.json") as { version: string };
 
 // Exit codes (meaningful for agents)
 const EXIT_SUCCESS = 0;
@@ -21,7 +25,7 @@ const program = new Command();
 program
   .name("isagentready")
   .description("Scan any website for AI agent readiness. Supports --json and piped output for AI agents.")
-  .version("0.1.0");
+  .version(VERSION);
 
 // ── scan ──────────────────────────────────────────────────────────────────────
 
@@ -40,9 +44,11 @@ program
       url: string,
       options: { verbose?: boolean; poll?: boolean; dryRun?: boolean } & OutputOptions
     ) => {
+      activeOutputOptions = options;
+      const json = isJsonMode(options);
+      const s = !json ? spinner() : null;
       try {
         const normalizedUrl = validateUrl(url);
-        const json = isJsonMode(options);
 
         // --dry-run: validate locally, don't hit the API
         if (options.dryRun) {
@@ -55,7 +61,6 @@ program
           process.exit(EXIT_SUCCESS);
         }
 
-        const s = !json ? spinner() : null;
         s?.update("Starting scan...");
 
         const initial = await startScan(normalizedUrl);
@@ -93,6 +98,7 @@ program
         s?.stop("Scan complete");
         outputResult(result, options);
       } catch (err) {
+        s?.stop();
         handleError(err);
       }
     }
@@ -109,11 +115,12 @@ program
   .option("--output <format>", "Output format: json or text (default: auto-detect)")
   .option("--fields <fields>", "Comma-separated fields to include (e.g. domain,overall_score,letter_grade)")
   .action(async (domain: string, options: { verbose?: boolean } & OutputOptions) => {
+    activeOutputOptions = options;
+    const json = isJsonMode(options);
+    const s = !json ? spinner() : null;
     try {
       const cleanDomain = validateDomain(domain);
-      const json = isJsonMode(options);
 
-      const s = !json ? spinner() : null;
       s?.update(`Fetching results for ${cleanDomain}...`);
 
       const result = await getScanResults(cleanDomain);
@@ -131,7 +138,8 @@ program
 
       outputResult(result, options);
     } catch (err) {
-      if (err instanceof Error && err.message.includes("not_found")) {
+      s?.stop();
+      if (err instanceof ApiError && err.status === 404) {
         handleError(err, EXIT_NOT_FOUND);
       } else {
         handleError(err);
@@ -162,9 +170,10 @@ program
       sort: string;
       pageAll?: boolean;
     } & OutputOptions) => {
+      activeOutputOptions = options;
+      const json = isJsonMode(options);
+      const s = !json ? spinner() : null;
       try {
-        const json = isJsonMode(options);
-
         // --page-all: stream all pages as NDJSON
         if (options.pageAll) {
           let page = 1;
@@ -195,7 +204,6 @@ program
           return;
         }
 
-        const s = !json ? spinner() : null;
         s?.update("Loading rankings...");
 
         const result = await getRankings({
@@ -224,6 +232,7 @@ program
           console.log(formatRankings(result));
         }
       } catch (err) {
+        s?.stop();
         handleError(err);
       }
     }
@@ -263,13 +272,15 @@ const outputResult = (result: ScanResult, options: { verbose?: boolean } & Outpu
   }
 };
 
+// Track current command's output options for error formatting
+let activeOutputOptions: OutputOptions = {};
+
 const handleError = (err: unknown, exitCode = EXIT_ERROR): void => {
   const isValidation = err instanceof ValidationError;
   const code = isValidation ? EXIT_VALIDATION : exitCode;
   const message = err instanceof Error ? err.message : String(err);
 
-  if (!process.stdout.isTTY || process.env["OUTPUT_FORMAT"] === "json") {
-    // Machine-readable error
+  if (isJsonMode(activeOutputOptions)) {
     console.error(JSON.stringify({ error: true, message, exit_code: code }));
   } else {
     console.error(`\n  \x1b[31mError:\x1b[0m ${message}\n`);
@@ -291,7 +302,7 @@ const getSchema = (): {
   }>;
 } => ({
   name: "isagentready",
-  version: "0.1.0",
+  version: VERSION,
   description: "Scan any website for AI agent readiness",
   api_base: "https://isagentready.com",
   commands: [
