@@ -85,9 +85,13 @@ program
         const domain = initial.domain ?? url.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
         s?.update(`Scanning ${domain}...`);
 
-        const result = await pollUntilComplete(domain, (status) => {
-          s?.update(`Scanning ${domain} (${status})...`);
-        });
+        const result = await pollUntilComplete(
+          domain,
+          (status) => {
+            s?.update(`Scanning ${domain} (${status})...`);
+          },
+          { firstWaitSeconds: initial.retry_after }
+        );
 
         if (result.status === "failed") {
           s?.stop();
@@ -281,7 +285,15 @@ const handleError = (err: unknown, exitCode = EXIT_ERROR): void => {
   const message = err instanceof Error ? err.message : String(err);
 
   if (isJsonMode(activeOutputOptions)) {
-    console.error(JSON.stringify({ error: true, message, exit_code: code }));
+    const retryAfter = err instanceof ApiError ? err.retryAfter : null;
+    console.error(
+      JSON.stringify({
+        error: true,
+        message,
+        exit_code: code,
+        ...(retryAfter === null ? {} : { retry_after: retryAfter }),
+      })
+    );
   } else {
     console.error(`\n  \x1b[31mError:\x1b[0m ${message}\n`);
   }
