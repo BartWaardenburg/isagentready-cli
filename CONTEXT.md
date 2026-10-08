@@ -91,7 +91,7 @@ isagentready schema scan     # Schema for scan command only
 - URLs without a protocol are assumed to be `https://`
 - Scan results are cached for ~1 hour — repeated scans may return cached data
 - Rankings are sorted by score (descending) by default
-- The API is rate-limited — if you get HTTP 429, wait and retry
+- The API is rate-limited (100 requests per IP per hour, and every poll counts). On HTTP 429 the JSON error has `retry_after` in seconds: wait that long, then retry. `scan` waits the server poll hint between polls and waits out a short 429 by itself.
 - All timestamps are UTC ISO 8601
 
 ## Scoring
