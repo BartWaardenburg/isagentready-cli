@@ -1,6 +1,6 @@
 {
   "name": "isagentready",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "packageManager": "pnpm@10.28.1",
   "description": "Scan any website for AI agent readiness from your terminal — scores, grades, and recommendations across 47 checkpoints",
   "type": "module",
