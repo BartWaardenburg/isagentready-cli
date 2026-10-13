@@ -2,7 +2,7 @@
   "name": "isagentready",
   "version": "0.2.2",
   "packageManager": "pnpm@10.28.1",
-  "description": "Scan any website for AI agent readiness from your terminal — scores, grades, and recommendations across 47 checkpoints",
+  "description": "Scan any website for AI agent readiness from your terminal \u2014 scores, grades, and recommendations across 47 checkpoints",
   "type": "module",
   "bin": {
     "isagentready": "dist/index.js"
@@ -20,7 +20,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "prepublishOnly": "pnpm build",
-    "release": "test -n \"$RELEASE_GITHUB_TOKEN\" && release-it"
+    "release": "node scripts/release.mjs",
+    "release:prepare": "node scripts/release.mjs prepare",
+    "release:publish": "node scripts/release.mjs publish"
   },
   "repository": {
     "type": "git",
