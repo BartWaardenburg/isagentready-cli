@@ -1,8 +1,8 @@
 # @isagentready/cli
 
-Scan any website for AI agent readiness from your terminal. Get scores, letter grades, and actionable recommendations across 47 checkpoints.
+Scan any website for AI agent readiness from your terminal. Get scores, letter grades, and fix steps for each checkpoint. Run `isagentready checkpoints` for the live list of checkpoints.
 
-Built for both humans and AI agents — auto-detects when piped and switches to JSON output.
+Built for both humans and AI agents. When you pipe the output, the CLI changes to JSON output.
 
 ```
 $ isagentready scan example.com
@@ -39,7 +39,7 @@ Scan a website and wait for results.
 
 ```bash
 isagentready scan example.com
-isagentready scan https://example.com --verbose      # Show all 47 checkpoints
+isagentready scan https://example.com --verbose      # Show all checkpoints, fix steps and verify commands
 isagentready scan example.com --json                 # Machine-readable JSON output
 isagentready scan example.com --dry-run              # Validate URL without scanning
 isagentready scan example.com --no-poll              # Start scan without waiting
@@ -54,6 +54,50 @@ Get the latest scan results for a domain.
 isagentready results example.com
 isagentready results example.com --verbose
 isagentready results example.com --json --fields domain,overall_score,letter_grade
+isagentready results example.com --failing                       # Only fail and partial checkpoints
+isagentready results example.com --checkpoint ia.a2a-agent-card  # One checkpoint (stable or legacy id)
+```
+
+For failing checkpoints, the text output shows the stable id, the stage and the strength. `--verbose` adds the fix steps and the verify command.
+
+### `isagentready checkpoints`
+
+List the checkpoint definitions of the current methodology: stable id, legacy id, stage (Find, Read, Act), strength (MUST, SHOULD, MAY) and name.
+
+```bash
+isagentready checkpoints
+isagentready checkpoints --stage act --strength MUST
+isagentready checkpoints --category agent_protocols --json
+isagentready checkpoints --ar AR-FIND-01
+```
+
+### `isagentready explain <id>`
+
+Show one checkpoint: why it matters, the fix steps, the verify command, the [agentready.org](https://www.agentready.org/) practice mapping and the fail rate in the latest benchmark. The id can be a stable id (`ia.robots-txt`) or a legacy id (`1.1`).
+
+```bash
+isagentready explain ia.a2a-agent-card
+isagentready explain 4.3 --json
+```
+
+### `isagentready methodology`
+
+Show the versioned methodology. The scoring weights are a separate document.
+
+```bash
+isagentready methodology                       # Current version, stages, latest change
+isagentready methodology --version 2026-09-02
+isagentready methodology --changelog
+isagentready methodology --scoring             # Category weights and grade bands
+```
+
+### `isagentready verify <id> <domain>`
+
+Get the status of one checkpoint and print its read-only verify command. The CLI prints the command for you to run. It never runs the command. The exit code is 5 when the status is fail or partial.
+
+```bash
+isagentready verify ia.a2a-agent-card example.com
+isagentready verify ia.a2a-agent-card example.com --rescan   # Start a new scan first
 ```
 
 ### `isagentready rankings`
@@ -78,19 +122,21 @@ isagentready schema              # Full CLI schema
 isagentready schema scan         # Schema for scan command only
 ```
 
+The schema also describes the output JSON shape of each command.
+
 ## Agent-friendly features
 
 This CLI follows the patterns from [Rewrite Your CLI for AI Agents](https://justin.poehnelt.com/posts/rewrite-your-cli-for-ai-agents/):
 
 ### Auto-detect non-TTY
 
-When stdout is piped or redirected, the CLI automatically outputs JSON — no `--json` flag needed:
+When you pipe or redirect stdout, the CLI writes JSON. You do not need the `--json` flag:
 
 ```bash
-# Piped → auto-JSON
+# Piped: JSON output
 isagentready results example.com | jq '.overall_score'
 
-# Interactive terminal → human-friendly colored output
+# Interactive terminal: colored text output
 isagentready results example.com
 ```
 
@@ -108,7 +154,10 @@ Limit response size to stay within context windows:
 
 ```bash
 isagentready results example.com --fields domain,overall_score,letter_grade
+isagentready results example.com --failing --fields domain,categories.checkpoints.stable_id,categories.checkpoints.failure
 ```
+
+A dot path selects a nested field. A path step into an array applies the rest of the path to each element.
 
 ### NDJSON streaming
 
@@ -148,22 +197,23 @@ All inputs are validated against adversarial patterns (path traversal, control c
 | 2 | Validation error (invalid input) |
 | 3 | Scan failed |
 | 4 | Not found |
+| 5 | `verify`: the checkpoint status is fail or partial |
 
 ### Agent guidance
 
-Ships with `CONTEXT.md` — a structured guidance file that AI agents can read to understand CLI conventions, invariants, and best practices.
+The package includes `CONTEXT.md`. This file tells AI agents the CLI conventions, invariants and good practices.
 
 ## What it checks
 
-The scanner evaluates 47 checkpoints across 5 weighted categories:
+The scanner uses a versioned set of checkpoints. It puts each checkpoint in one stage of the [agentready.org](https://www.agentready.org/) spec: Find, Read or Act. Run `isagentready checkpoints` for the live list, and `isagentready methodology --scoring` for the current category weights.
 
-| Category | Weight | What it checks |
-|---|---|---|
-| AI Content Discovery | 30% | robots.txt, AI crawlers, sitemap, llms.txt, meta robots |
-| AI Search Signals | 20% | JSON-LD, Schema.org, entity linking, FAQPage, author attribution |
-| Content & Semantics | 20% | SSR, heading hierarchy, semantic HTML, ARIA, accessibility |
-| Agent Protocols | 15% | WebMCP, A2A, MCP discovery, OpenAPI, agents.json |
-| Security & Trust | 15% | HTTPS, HSTS, CSP, security headers, CORS |
+| Category | Examples |
+|---|---|
+| AI Content Discovery | robots.txt, AI crawlers, sitemap, llms.txt, meta robots |
+| AI Search Signals | JSON-LD, Schema.org, entity linking, FAQPage, author attribution |
+| Content & Semantics | SSR, heading hierarchy, semantic HTML, ARIA, accessibility |
+| Agent Protocols | WebMCP, A2A, MCP discovery, OpenAPI, agents.json |
+| Security & Trust | HTTPS, HSTS, CSP, security headers, CORS |
 
 ## Requirements
 
