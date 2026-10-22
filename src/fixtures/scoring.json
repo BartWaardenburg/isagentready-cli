@@ -1,0 +1,6 @@
+{
+  "version": "2026-11-02",
+  "categories": [{ "category": "agent_protocols", "label": "Agent Protocols", "weight": 15 }],
+  "checkpoints": [{ "id": "ia.a2a-agent-card", "legacy_id": "4.3", "max_score": 10, "score_role": "bonus" }],
+  "grade_bands": [{ "grade": "A+", "min": 95, "max": 100 }]
+}

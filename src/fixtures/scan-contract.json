@@ -1,0 +1,121 @@
+{
+  "id": "abc-123",
+  "status": "completed",
+  "domain": "example.com",
+  "completed_at": "2026-10-20T10:30:00Z",
+  "overall_score": 72,
+  "letter_grade": "B",
+  "scan_duration_ms": 18500,
+  "methodology_version": "2026-09-02",
+  "spec_alignment": { "agentready_spec": "2.0", "url": "https://www.agentready.org/", "license": "MIT" },
+  "stage_summary": [
+    { "stage": "find", "name": "Find", "passed": 4, "total": 6 },
+    { "stage": "read", "name": "Read", "passed": 9, "total": 12 },
+    { "stage": "act", "name": "Act", "passed": 2, "total": 10 }
+  ],
+  "categories": [
+    {
+      "category": "discovery",
+      "label": "AI Content Discovery",
+      "score": 80,
+      "max_score": 100,
+      "weight": 30,
+      "checkpoints": [
+        {
+          "id": "1.3",
+          "stable_id": "ia.llms-txt",
+          "legacy_id": "1.3",
+          "name": "llms.txt",
+          "category": "discovery",
+          "stage": "find",
+          "strength": "SHOULD",
+          "evidence_type": "scanner_data",
+          "status": "partial",
+          "score": 5,
+          "max_score": 10,
+          "applicable": true,
+          "details": "llms.txt has no links",
+          "recommendation": "Add links to llms.txt",
+          "failure": {
+            "reason_code": "llms_txt_no_links",
+            "message": "llms.txt has no links",
+            "observed": { "links": 0 },
+            "expected": "At least one Markdown link"
+          },
+          "fix": { "summary": "Add links to llms.txt.", "steps": [{ "order": 1, "action": "Add a list of links.", "code_example": null, "language": null }] },
+          "verify": { "command": "curl -sf {origin}/llms.txt | grep -q '](http'", "expect": "exit code 0", "rescan": "isagentready results {domain} --checkpoint ia.llms-txt" },
+          "aggregate": null
+        }
+      ]
+    },
+    {
+      "category": "agent_protocols",
+      "label": "Agent Protocols",
+      "score": 40,
+      "max_score": 100,
+      "weight": 15,
+      "checkpoints": [
+        {
+          "id": "4.3",
+          "stable_id": "ia.a2a-agent-card",
+          "legacy_id": "4.3",
+          "ar_practice_ids": ["AR-READ-06"],
+          "ar_mapping": "partial",
+          "name": "A2A Agent Card",
+          "category": "agent_protocols",
+          "stage": "act",
+          "strength": "MAY",
+          "evidence_type": "recommendation",
+          "status": "fail",
+          "score": 0,
+          "max_score": 10,
+          "applicable": true,
+          "details": "No agent card found",
+          "recommendation": "Publish an agent card",
+          "failure": {
+            "reason_code": "agent_card_missing",
+            "message": "No agent card found at /.well-known/agent-card.json (HTTP 404).",
+            "observed": { "url": "https://example.com/.well-known/agent-card.json", "http_status": 404 },
+            "expected": "JSON document with name, description, url, capabilities"
+          },
+          "fix": {
+            "summary": "Publish an agent card at /.well-known/agent-card.json.",
+            "steps": [
+              { "order": 1, "action": "Create the agent card JSON file.", "code_example": "{\"name\":\"Example\"}", "language": "json" },
+              { "order": 2, "action": "Serve the file with Content-Type application/json.", "code_example": null, "language": null }
+            ],
+            "skill": { "name": "agent-protocols", "anchor": "ia.a2a-agent-card" }
+          },
+          "verify": {
+            "command": "curl -sf https://{domain}/.well-known/agent-card.json | jq -e '.name and .url'",
+            "expect": "exit code 0",
+            "rescan": "isagentready results {domain} --checkpoint ia.a2a-agent-card"
+          },
+          "score_impact": { "score_before": 61, "score_after": 64, "score_delta": 3, "exact_score_delta": 2.8 },
+          "priority": "medium",
+          "aggregate": {
+            "benchmark_version": "2026-q3",
+            "denominator": 4210,
+            "rates": { "pass": 0.04, "partial": 0.02, "fail": 0.94, "skip": 0.0 },
+            "source_url": "https://isagentready.com/en/research/state-of-agent-ready-web/2026-q3"
+          },
+          "detail_url": "https://isagentready.com/en/methodology/checkpoints/ia.a2a-agent-card"
+        },
+        {
+          "id": "4.1",
+          "stable_id": "ia.webmcp",
+          "legacy_id": "4.1",
+          "name": "WebMCP",
+          "stage": "act",
+          "strength": "SHOULD",
+          "status": "pass",
+          "score": 10,
+          "max_score": 10,
+          "applicable": true,
+          "details": "WebMCP tools found",
+          "failure": null
+        }
+      ]
+    }
+  ]
+}

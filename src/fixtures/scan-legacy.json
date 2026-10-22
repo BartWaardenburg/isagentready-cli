@@ -1,0 +1,84 @@
+{
+  "id": "abc-123",
+  "status": "completed",
+  "domain": "example.com",
+  "completed_at": "2026-10-20T10:30:00Z",
+  "overall_score": 72,
+  "letter_grade": "B",
+  "scan_duration_ms": 18500,
+  "methodology_version": "2026-09-02",
+  "categories": [
+    {
+      "category": "discovery",
+      "label": "AI Content Discovery",
+      "score": 80,
+      "max_score": 100,
+      "weight": 30,
+      "checkpoints": [
+        {
+          "id": "1.1",
+          "name": "robots.txt",
+          "status": "pass",
+          "score": 15,
+          "max_score": 15,
+          "details": "Valid robots.txt found"
+        },
+        {
+          "id": "1.3",
+          "name": "llms.txt",
+          "status": "partial",
+          "score": 5,
+          "max_score": 10,
+          "details": "llms.txt has no links",
+          "recommendation": "Add links to llms.txt"
+        }
+      ]
+    },
+    {
+      "category": "agent_protocols",
+      "label": "Agent Protocols",
+      "score": 40,
+      "max_score": 100,
+      "weight": 15,
+      "checkpoints": [
+        {
+          "id": "4.3",
+          "name": "A2A Agent Card",
+          "status": "fail",
+          "score": 0,
+          "max_score": 10,
+          "details": "No agent card found",
+          "recommendation": "Publish an agent card"
+        },
+        {
+          "id": "5.12",
+          "name": "OAuth Discovery",
+          "status": "fail",
+          "score": 0,
+          "max_score": 0,
+          "applicable": false,
+          "details": "No OAuth discovery document found"
+        }
+      ]
+    }
+  ],
+  "training_exposure": {
+    "summary": "No AI training protections detected.",
+    "checks": [
+      {
+        "id": "te.1",
+        "name": "Common Crawl presence",
+        "status": "unknown",
+        "details": "Common Crawl presence was not checked during this scan.",
+        "extra": null
+      },
+      {
+        "id": "te.3",
+        "name": "TDMRep declaration",
+        "status": "not_found",
+        "details": "No TDMRep file found at /.well-known/tdmrep.json.",
+        "extra": null
+      }
+    ]
+  }
+}

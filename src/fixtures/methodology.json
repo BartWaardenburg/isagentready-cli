@@ -1,0 +1,34 @@
+{
+  "version": "2026-11-02",
+  "supported_versions": ["2026-11-02", "2026-09-02", "2026-08-29", "2026-08-27", "2026-08-25", "2026-08-24"],
+  "spec_alignment": { "agentready_spec": "2.0", "url": "https://www.agentready.org/", "license": "MIT" },
+  "stages": [
+    { "id": "find", "name": "Find", "summary": "Agents can find the site and its content." },
+    { "id": "read", "name": "Read", "summary": "Agents can read and understand the content." },
+    { "id": "act", "name": "Act", "summary": "Agents can do tasks on the site." }
+  ],
+  "strength_rule": "full AR mapping uses the AR strength; else essential=MUST, recommended=SHOULD, emerging=MAY",
+  "evidence_types": ["measured_study", "scanner_data", "recommendation"],
+  "ar_practices": [
+    {
+      "id": "AR-FIND-01",
+      "name": "Allow agent crawlers",
+      "stage": "find",
+      "strength": "MUST",
+      "evidence": "scanner",
+      "checkpoint_ids": ["ia.robots-txt"]
+    }
+  ],
+  "changelog": [
+    {
+      "version": "2026-11-02",
+      "date": "2026-11-02",
+      "summary": "Adds seven checks. The AR mapping, strength and evidence type are new metadata and do not change scores.",
+      "introduced": ["ia.mcp-apps", "ia.nlweb"],
+      "revised": [],
+      "retired": []
+    }
+  ],
+  "scoring": { "href": "/api/v2/methodology/2026-11-02/scoring" },
+  "checkpoints": []
+}

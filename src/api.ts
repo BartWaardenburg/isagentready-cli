@@ -1,16 +1,133 @@
 const BASE_URL = "https://isagentready.com";
 
-export interface Checkpoint {
+/** Agent readiness stage from the agentready.org spec. */
+export type Stage = "find" | "read" | "act";
+
+/** Spec strength. `null` marks an informational checkpoint. */
+export type Strength = "MUST" | "SHOULD" | "MAY" | null;
+
+export type EvidenceType = "measured_study" | "scanner_data" | "recommendation";
+
+export type ArMapping = "full" | "partial" | "none";
+
+export type CheckpointStatus = "pass" | "partial" | "fail" | "skip";
+
+export interface Reference {
+  title: string;
+  url: string;
+  kind?: "spec" | "study" | "guide";
+}
+
+export interface FixStep {
+  order: number;
+  action: string;
+  code_example: string | null;
+  language: string | null;
+}
+
+export interface Fix {
+  summary: string;
+  steps: FixStep[];
+  skill?: { name: string; anchor: string } | null;
+}
+
+/**
+ * A read-only check that the user can run. The CLI prints the command and
+ * never runs it. `command` is null when no shell check is possible.
+ */
+export interface Verify {
+  command: string | null;
+  expect: string | null;
+  rescan: string;
+}
+
+export interface Lifecycle {
+  introduced: string;
+  revised: string[];
+  retired: string | null;
+  replaced_by: string | null;
+}
+
+/** Aggregate result rates from the latest published benchmark snapshot. */
+export interface Aggregate {
+  benchmark_version: string;
+  denominator: number;
+  rates: { pass: number; partial: number; fail: number; skip: number };
+  source_url: string;
+}
+
+export interface Failure {
+  reason_code: string;
+  message: string;
+  observed: Record<string, unknown>;
+  expected: string | null;
+}
+
+export interface ScoreImpact {
+  score_before: number;
+  score_after: number;
+  score_delta: number;
+  exact_score_delta: number;
+}
+
+/** Checkpoint definition from the shared contract. `id` is the stable id. */
+export interface CheckpointDefinition {
   id: string;
+  legacy_id: string;
+  ar_practice_ids: string[];
+  ar_mapping: ArMapping;
   name: string;
-  status: "pass" | "partial" | "fail" | "skip";
+  category: string;
+  stage: Stage;
+  strength: Strength;
+  evidence_type: EvidenceType;
+  evidence_source?: { title: string; url: string } | null;
+  evidence_tier?: string;
+  score_role?: string;
+  maturity?: string;
+  profiles?: string[];
+  applicability?: { mode: string; surfaces: string[]; condition: string | null };
+  why?: string;
+  references?: Reference[];
+  fix?: Fix;
+  verify?: Verify;
+  lifecycle?: Lifecycle;
+  methodology_version: string;
+  detail_url: string;
+  aggregate?: Aggregate | null;
+}
+
+/**
+ * Checkpoint in a scan result. The v1 payload keeps the legacy id in `id`.
+ * The contract fields are present only when the server sends them.
+ */
+export interface Checkpoint
+  extends Partial<Omit<CheckpointDefinition, "id" | "name" | "why" | "references">> {
+  id: string;
+  /** Stable id (`ia.<slug>`) when `id` holds the legacy id. */
+  stable_id?: string;
+  name: string;
+  status: CheckpointStatus;
   score: number;
   max_score: number;
   details: string;
-  recommendation?: string;
+  recommendation?: string | null;
   why?: string;
   code_example?: string;
+  references?: Reference[];
+  applicable?: boolean;
+  failure?: Failure | null;
+  score_impact?: ScoreImpact | null;
+  priority?: string | null;
+  /**
+   * Set by the CLI for a training exposure check. These checks have no score,
+   * so `status` is "skip" and this field holds the server status (for example not_found).
+   */
+  exposure_status?: string;
 }
+
+/** Checkpoint result with the full contract fields. */
+export type CheckpointResult = Checkpoint & Partial<CheckpointDefinition>;
 
 export interface Category {
   category: string;
@@ -19,6 +136,70 @@ export interface Category {
   max_score: number;
   weight: number;
   checkpoints: Checkpoint[];
+}
+
+export interface Issue {
+  id: string;
+  stable_id?: string;
+  name: string;
+  priority?: string;
+  status: CheckpointStatus;
+  category?: string;
+  stage?: Stage;
+  strength?: Strength;
+  evidence?: string;
+  recommendation?: string | null;
+  references?: Reference[];
+  score_role?: string;
+  maturity?: string;
+  potential_gain?: number;
+  score_impact?: ScoreImpact | null;
+}
+
+export interface ProfileResult {
+  applicable: boolean;
+  completeness?: string;
+  grade: string | null;
+  score: number | null;
+}
+
+export interface ScoreContext {
+  scope?: string;
+  methodology_version?: string;
+  completeness?: string;
+  detected_surfaces?: string[];
+  measured_coverage?: { applicable_points: number; earned_points: number };
+  outcome_validation?: string;
+}
+
+export interface StageSummaryEntry {
+  stage: Stage;
+  name?: string;
+  passed?: number;
+  total?: number;
+}
+
+export interface SpecAlignment {
+  agentready_spec: string;
+  url: string;
+  license?: string;
+}
+
+/** One training exposure check (`te.1` to `te.5`). The server does not score these checks. */
+export interface TrainingExposureCheck {
+  id: string;
+  stable_id?: string;
+  legacy_id?: string;
+  name: string;
+  /** For example found, not_found, partial, fail or unknown. */
+  status: string;
+  details?: string;
+  extra?: unknown;
+}
+
+export interface TrainingExposure {
+  summary?: string;
+  checks?: TrainingExposureCheck[];
 }
 
 export interface ScanResult {
@@ -34,6 +215,78 @@ export interface ScanResult {
   poll_url?: string;
   /** Seconds the server asks a client to wait before the next poll. */
   retry_after?: number;
+  issues?: Issue[];
+  training_exposure?: TrainingExposure;
+  profiles?: Record<string, ProfileResult>;
+  methodology_version?: string;
+  score_context?: ScoreContext;
+  stage_summary?: StageSummaryEntry[];
+  spec_alignment?: SpecAlignment;
+}
+
+export interface ArPractice {
+  id: string;
+  name: string;
+  stage: Stage;
+  strength: Strength;
+  evidence: string;
+  checkpoint_ids: string[];
+}
+
+export interface ChangelogEntry {
+  version: string;
+  date: string;
+  summary: string;
+  introduced: string[];
+  revised: string[];
+  retired: string[];
+}
+
+export interface MethodologyDocument {
+  version: string;
+  supported_versions: string[];
+  spec_alignment: SpecAlignment;
+  stages: Array<{ id: Stage; name: string; summary: string }>;
+  strength_rule: string;
+  evidence_types: EvidenceType[];
+  ar_practices: ArPractice[];
+  changelog: ChangelogEntry[];
+  scoring?: { href: string };
+  checkpoints: CheckpointDefinition[];
+}
+
+/** Scoring weights. The methodology spec document holds none of these values. */
+export interface ScoringDocument {
+  version: string;
+  categories?: Array<{ category: string; label?: string; weight: number }>;
+  checkpoints?: Array<{ id: string; legacy_id?: string; max_score: number; score_role?: string }>;
+  grade_bands?: Array<{ grade: string; min: number; max: number }>;
+}
+
+export interface CheckpointList {
+  checkpoints: CheckpointDefinition[];
+  total?: number;
+  methodology_version?: string;
+}
+
+export interface ChangelogDocument {
+  changelog: ChangelogEntry[];
+}
+
+export interface CheckpointFilters {
+  stage?: string;
+  strength?: string;
+  category?: string;
+  ar?: string;
+  /** Methodology version (YYYY-MM-DD). Default: current. */
+  version?: string;
+}
+
+export interface ScanResultOptions {
+  /** Ask the server for the failing checkpoints only. */
+  failing?: boolean;
+  /** Ask the server for the full checkpoint contract fields. */
+  contract?: boolean;
 }
 
 export interface RankingsResponse {
@@ -87,9 +340,11 @@ const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
     const body = (await response.json().catch(() => null)) as {
       error?: string;
       message?: string;
+      detail?: string;
+      title?: string;
       retry_after?: unknown;
     } | null;
-    const message = body?.message ?? body?.error ?? `HTTP ${response.status}`;
+    const message = body?.message ?? body?.detail ?? body?.error ?? body?.title ?? `HTTP ${response.status}`;
 
     if (response.status === HTTP_TOO_MANY_REQUESTS) {
       const retryAfter = parseRetryAfter(response, body);
@@ -103,8 +358,64 @@ const request = async <T>(path: string, options?: RequestInit): Promise<T> => {
   return response.json() as Promise<T>;
 };
 
-export const getScanResults = (domain: string): Promise<ScanResult> =>
-  request<ScanResult>(`/api/v1/scan/${encodeURIComponent(domain)}`);
+const queryString = (params: URLSearchParams): string => {
+  const query = params.toString();
+  return query ? `?${query}` : "";
+};
+
+export const getScanResults = (domain: string, options: ScanResultOptions = {}): Promise<ScanResult> => {
+  const params = new URLSearchParams();
+  if (options.failing) params.set("checkpoints", "failing");
+  if (options.contract) params.set("include", "contract");
+  return request<ScanResult>(`/api/v1/scan/${encodeURIComponent(domain)}${queryString(params)}`);
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** Accepts a bare array or an object that holds the array under `key`. */
+const unwrapList = (body: unknown, key: string): Record<string, unknown> => {
+  if (Array.isArray(body)) return { [key]: body };
+  if (isRecord(body) && Array.isArray(body[key])) return body;
+  return { ...(isRecord(body) ? body : {}), [key]: [] };
+};
+
+/** Accepts a bare object or an object that holds it under `key`. */
+const unwrapItem = <T>(body: unknown, key: string): T =>
+  (isRecord(body) && isRecord(body[key]) ? body[key] : body) as T;
+
+const CHECKPOINT_FILTER_KEYS = ["stage", "strength", "category", "ar", "version"] as const;
+
+/** Lists checkpoint definitions. The server filters on stage, strength, category, AR practice and methodology version. */
+export const listCheckpoints = async (filters: CheckpointFilters = {}): Promise<CheckpointList> => {
+  const params = new URLSearchParams();
+  for (const key of CHECKPOINT_FILTER_KEYS) {
+    const value = filters[key];
+    if (value) params.set(key, value);
+  }
+  const body = await request<unknown>(`/api/v2/checkpoints${queryString(params)}`);
+  return unwrapList(body, "checkpoints") as unknown as CheckpointList;
+};
+
+/** Gets one checkpoint definition. The server accepts the stable id and the legacy id. */
+export const getCheckpoint = async (id: string): Promise<CheckpointDefinition> =>
+  unwrapItem<CheckpointDefinition>(
+    await request<unknown>(`/api/v2/checkpoints/${encodeURIComponent(id)}`),
+    "checkpoint"
+  );
+
+/** Gets the current methodology, or one version of it. */
+export const getMethodology = (version?: string): Promise<MethodologyDocument> =>
+  request<MethodologyDocument>(
+    version ? `/api/v2/methodology/${encodeURIComponent(version)}` : "/api/v2/methodology"
+  );
+
+export const getMethodologyChangelog = async (): Promise<ChangelogDocument> =>
+  unwrapList(await request<unknown>("/api/v2/methodology/changelog"), "changelog") as unknown as ChangelogDocument;
+
+/** Gets the scoring weights of one methodology version. */
+export const getMethodologyScoring = (version: string): Promise<ScoringDocument> =>
+  request<ScoringDocument>(`/api/v2/methodology/${encodeURIComponent(version)}/scoring`);
 
 export const startScan = (url: string): Promise<ScanResult> =>
   request<ScanResult>("/api/v1/scan", {

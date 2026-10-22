@@ -2,7 +2,7 @@
   "name": "isagentready",
   "version": "0.2.2",
   "packageManager": "pnpm@10.28.1",
-  "description": "Scan any website for AI agent readiness from your terminal — scores, grades, and recommendations across 47 checkpoints",
+  "description": "Scan any website for AI agent readiness from your terminal: scores, grades, and per-checkpoint fix steps and verify commands",
   "type": "module",
   "bin": {
     "isagentready": "dist/index.js"
@@ -37,7 +37,11 @@
     "aeo",
     "seo",
     "automation",
-    "llm"
+    "llm",
+    "agentready",
+    "agent-ready",
+    "checkpoints",
+    "methodology"
   ],
   "author": "Bart Waardenburg",
   "license": "MIT",

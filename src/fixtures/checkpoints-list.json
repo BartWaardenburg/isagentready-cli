@@ -1,0 +1,32 @@
+{
+  "methodology_version": "2026-09-02",
+  "total": 2,
+  "checkpoints": [
+    {
+      "id": "ia.robots-txt",
+      "legacy_id": "1.1",
+      "ar_practice_ids": ["AR-FIND-01"],
+      "ar_mapping": "full",
+      "name": "robots.txt",
+      "category": "discovery",
+      "stage": "find",
+      "strength": "MUST",
+      "evidence_type": "scanner_data",
+      "methodology_version": "2026-09-02",
+      "detail_url": "https://isagentready.com/en/methodology/checkpoints/ia.robots-txt"
+    },
+    {
+      "id": "ia.a2a-agent-card",
+      "legacy_id": "4.3",
+      "ar_practice_ids": ["AR-READ-06"],
+      "ar_mapping": "partial",
+      "name": "A2A Agent Card",
+      "category": "agent_protocols",
+      "stage": "act",
+      "strength": "MAY",
+      "evidence_type": "recommendation",
+      "methodology_version": "2026-09-02",
+      "detail_url": "https://isagentready.com/en/methodology/checkpoints/ia.a2a-agent-card"
+    }
+  ]
+}
