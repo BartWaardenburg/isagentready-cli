@@ -15,7 +15,14 @@
       "max_score": 100,
       "weight": 30,
       "checkpoints": [
-        { "id": "1.1", "name": "robots.txt", "status": "pass", "score": 15, "max_score": 15, "details": "Valid robots.txt found" },
+        {
+          "id": "1.1",
+          "name": "robots.txt",
+          "status": "pass",
+          "score": 15,
+          "max_score": 15,
+          "details": "Valid robots.txt found"
+        },
         {
           "id": "1.3",
           "name": "llms.txt",
@@ -42,8 +49,36 @@
           "max_score": 10,
           "details": "No agent card found",
           "recommendation": "Publish an agent card"
+        },
+        {
+          "id": "5.12",
+          "name": "OAuth Discovery",
+          "status": "fail",
+          "score": 0,
+          "max_score": 0,
+          "applicable": false,
+          "details": "No OAuth discovery document found"
         }
       ]
     }
-  ]
+  ],
+  "training_exposure": {
+    "summary": "No AI training protections detected.",
+    "checks": [
+      {
+        "id": "te.1",
+        "name": "Common Crawl presence",
+        "status": "unknown",
+        "details": "Common Crawl presence was not checked during this scan.",
+        "extra": null
+      },
+      {
+        "id": "te.3",
+        "name": "TDMRep declaration",
+        "status": "not_found",
+        "details": "No TDMRep file found at /.well-known/tdmrep.json.",
+        "extra": null
+      }
+    ]
+  }
 }

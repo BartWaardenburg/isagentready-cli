@@ -201,8 +201,13 @@ export const formatFailingResult = (scan: ScanResult, verbose = false): string =
 
 /** Text for `results <domain> --checkpoint <id>`. */
 export const formatCheckpointResult = (domain: string, cp: Checkpoint, verbose = false): string => {
-  const lines = ["", `  ${statusIcon(cp.status)} ${bold(cp.name)}`, `    ${dim(idTags(cp))}`];
-  lines.push(`    ${cp.status}  ${cp.score}/${cp.max_score}`);
+  const icon = statusIcon(cp.applicable === false ? "skip" : cp.status);
+  const lines = ["", `  ${icon} ${bold(cp.name)}`, `    ${dim(idTags(cp))}`];
+  lines.push(
+    cp.exposure_status === undefined
+      ? `    ${cp.status}  ${cp.score}/${cp.max_score}${cp.applicable === false ? `  ${dim("not applicable")}` : ""}`
+      : `    ${cp.exposure_status}  ${dim("training exposure, not scored")}`
+  );
 
   const message = cp.failure?.message ?? cp.details;
   if (message) lines.push(`    ${truncate(message, MESSAGE_WIDTH)}`);
@@ -214,13 +219,24 @@ export const formatCheckpointResult = (domain: string, cp: Checkpoint, verbose =
   return lines.join("\n");
 };
 
+/** A short note for each outcome that is not a plain pass or fail. Exit code 0 means nothing to fix. */
+const OUTCOME_NOTES: Record<VerifyReport["outcome"], string | null> = {
+  pass: null,
+  fail: null,
+  not_applicable: "This checkpoint does not apply to this site. Nothing to fix.",
+  skipped: "The scan did not run this checkpoint. Nothing to fix now.",
+  informational: "Training exposure check. It has no score. Nothing to fix.",
+};
+
 /** Text for `verify <id> <domain>`. The command is printed, never run. */
 export const formatVerifyReport = (report: VerifyReport): string => {
   const lines = [
     "",
-    `  ${statusIcon(report.status)} ${bold(report.name)}  ${dim(report.checkpoint_id)}`,
-    `    ${report.status} on ${report.domain}`,
+    `  ${statusIcon(report.outcome === "not_applicable" ? "skip" : report.status)} ${bold(report.name)}  ${dim(report.checkpoint_id)}`,
+    `    ${report.exposure_status ?? report.status} on ${report.domain}`,
   ];
+  const note = OUTCOME_NOTES[report.outcome];
+  if (note) lines.push(`    ${dim(note)}`);
   const message = report.failure?.message ?? report.details;
   if (message) lines.push(`    ${truncate(message, MESSAGE_WIDTH)}`);
   lines.push("");

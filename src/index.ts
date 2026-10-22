@@ -139,8 +139,8 @@ program
   .description("Get latest scan results for a domain")
   .argument("<domain>", "Domain to get results for (e.g. example.com)")
   .option("-v, --verbose", "Show all checkpoints with details")
-  .option("--failing", "Show only fail and partial checkpoints, with the checkpoint contract fields")
-  .option("--checkpoint <id>", "Show one checkpoint (stable id such as ia.robots-txt, or legacy id such as 1.1)")
+  .option("--failing", "Show only fail and partial checkpoints that apply to the site, with the checkpoint contract fields")
+  .option("--checkpoint <id>", "Show one checkpoint (stable id such as ia.robots-txt, or legacy id such as 1.1 or te.1)")
   .option("--json", "Output raw JSON (machine-readable)")
   .option("--output <format>", "Output format: json or text (default: auto-detect)")
   .option("--fields <fields>", FIELDS_HELP)
@@ -214,11 +214,14 @@ program
   .option("--strength <strength>", "Filter by strength: MUST, SHOULD or MAY")
   .option("--category <category>", "Filter by category key (e.g. agent_protocols)")
   .option("--ar <practice>", "Filter by agentready.org practice id (e.g. AR-FIND-01)")
+  .option("--version <version>", "Methodology version (e.g. 2026-09-02). Default: current")
   .option("--json", "Output raw JSON (machine-readable)")
   .option("--output <format>", "Output format: json or text (default: auto-detect)")
   .option("--fields <fields>", FIELDS_HELP)
   .action(
-    async (options: { stage?: string; strength?: string; category?: string; ar?: string } & OutputOptions) => {
+    async (
+      options: { stage?: string; strength?: string; category?: string; ar?: string; version?: string } & OutputOptions
+    ) => {
       activeOutputOptions = options;
       const result = await withSpinner(isJsonMode(options), "Loading checkpoints...", () =>
         runCheckpoints({
@@ -226,6 +229,7 @@ program
           strength: options.strength,
           category: options.category,
           ar: options.ar,
+          version: options.version,
         })
       );
       printResult(result, options, formatCheckpointList);
@@ -237,7 +241,7 @@ program
 program
   .command("explain")
   .description("Explain one checkpoint: why it matters, fix steps, verify command, AR mapping and fail rate")
-  .argument("<id>", "Checkpoint id: stable (e.g. ia.robots-txt) or legacy (e.g. 1.1)")
+  .argument("<id>", "Checkpoint id: stable (e.g. ia.robots-txt) or legacy (e.g. 1.1 or te.1)")
   .option("--json", "Output raw JSON (machine-readable)")
   .option("--output <format>", "Output format: json or text (default: auto-detect)")
   .option("--fields <fields>", FIELDS_HELP)
@@ -282,7 +286,7 @@ program
 program
   .command("verify")
   .description("Check the status of one checkpoint and print its read-only verify command (never run)")
-  .argument("<id>", "Checkpoint id: stable (e.g. ia.robots-txt) or legacy (e.g. 1.1)")
+  .argument("<id>", "Checkpoint id: stable (e.g. ia.robots-txt) or legacy (e.g. 1.1 or te.1)")
   .argument("<domain>", "Domain to check (e.g. example.com)")
   .option("--rescan", "Start a new scan first (the server can return a cached result)")
   .option("--json", "Output raw JSON (machine-readable)")
@@ -502,7 +506,7 @@ const OUTPUT_OPTIONS = [
 const CHECKPOINT_ID_ARGUMENT = {
   name: "id",
   required: true,
-  description: "Checkpoint id: stable (ia.<slug>) or legacy (e.g. 1.1)",
+  description: "Checkpoint id: stable (ia.<slug>) or legacy (e.g. 1.1 or te.1)",
 };
 
 const CONTRACT_FIELDS = [
@@ -595,13 +599,13 @@ const getSchema = (): {
       ],
       options: [
         { flags: "-v, --verbose", description: "Show all checkpoints with details, fix steps and verify commands" },
-        { flags: "--failing", description: "Only fail and partial checkpoints, with the contract fields" },
+        { flags: "--failing", description: "Only fail and partial checkpoints that apply to the site, with the contract fields" },
         { flags: "--checkpoint <id>", description: "One checkpoint, by stable or legacy id" },
         ...OUTPUT_OPTIONS,
       ],
       output: {
         default: SCAN_RESULT_OUTPUT,
-        failing: { ...SCAN_RESULT_OUTPUT, description: "ScanResult with only fail and partial checkpoints." },
+        failing: { ...SCAN_RESULT_OUTPUT, description: "ScanResult with only the fail and partial checkpoints that apply to the site." },
         checkpoint: {
           type: "CheckpointInScan",
           description: "One checkpoint result with the scan context.",
@@ -623,6 +627,7 @@ const getSchema = (): {
         { flags: "--strength <strength>", description: "Filter: MUST, SHOULD or MAY" },
         { flags: "--category <category>", description: "Filter by category key" },
         { flags: "--ar <practice>", description: "Filter by agentready.org practice id (e.g. AR-FIND-01)" },
+        { flags: "--version <version>", description: "Methodology version (YYYY-MM-DD). Default: current" },
         ...OUTPUT_OPTIONS,
       ],
       output: {
@@ -643,7 +648,7 @@ const getSchema = (): {
       description: "Show the versioned methodology (spec), its changelog, or its scoring weights.",
       options: [
         { flags: "--version <version>", description: "Methodology version (YYYY-MM-DD). Default: current" },
-        { flags: "--changelog", description: "Show the changelog" },
+        { flags: "--changelog", description: "Show the changelog of all versions. Cannot be used with --version or --scoring" },
         { flags: "--scoring", description: "Show the scoring weights and grade bands" },
         ...OUTPUT_OPTIONS,
       ],
@@ -679,7 +684,7 @@ const getSchema = (): {
     {
       name: "verify",
       description:
-        "Get the status of one checkpoint and its read-only verify command. The CLI prints the command and never runs it. Exits 5 when the status is fail or partial.",
+        "Get the status of one checkpoint and its read-only verify command. The CLI prints the command and never runs it. Exits 5 only when outcome is fail. Exits 0 for pass, not_applicable, skipped and informational: read outcome.",
       arguments: [CHECKPOINT_ID_ARGUMENT, { name: "domain", required: true, description: "Domain to check" }],
       options: [{ flags: "--rescan", description: "Start a new scan first" }, ...OUTPUT_OPTIONS],
       output: {
@@ -691,7 +696,9 @@ const getSchema = (): {
           "legacy_id",
           "name",
           "status",
+          "exposure_status",
           "passed",
+          "outcome",
           "failure",
           "details",
           "verify_source",

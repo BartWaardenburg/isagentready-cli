@@ -18,6 +18,7 @@ import type {
   CheckpointStatus,
   Failure,
   MethodologyDocument,
+  TrainingExposureCheck,
   ScanResult,
   ScoringDocument,
   Verify,
@@ -40,7 +41,7 @@ export const EXIT = {
   VALIDATION: 2,
   SCAN_FAILED: 3,
   NOT_FOUND: 4,
-  /** `verify` only: the checkpoint status is fail or partial. */
+  /** `verify` only: the checkpoint applies to the site and its status is fail or partial. */
   CHECK_FAILED: 5,
 } as const;
 
@@ -68,14 +69,33 @@ export const stableIdOf = (cp: IdSource): string | null =>
 export const legacyIdOf = (cp: IdSource): string | null =>
   cp.legacy_id ?? (isStableId(cp.id) ? null : cp.id);
 
-export const isFailing = (cp: Pick<Checkpoint, "status">): boolean => FAILING_STATUSES.includes(cp.status);
+/** True for a fail or partial status. A checkpoint that does not apply to the site is never failing. */
+export const isFailing = (cp: Pick<Checkpoint, "status" | "applicable">): boolean =>
+  cp.applicable !== false && FAILING_STATUSES.includes(cp.status);
 
 const matchesId = (cp: IdSource, id: string): boolean =>
   cp.id === id || cp.stable_id === id || cp.legacy_id === id;
 
-export const findCheckpoint = (scan: ScanResult, id: string): Checkpoint | null =>
-  (scan.categories ?? []).flatMap((category) => category.checkpoints ?? []).find((cp) => matchesId(cp, id)) ??
-  null;
+/** A training exposure check has no score. The CLI shows it as a skipped checkpoint and keeps the server status. */
+const fromExposureCheck = (check: TrainingExposureCheck): Checkpoint => ({
+  id: check.id,
+  ...(check.stable_id === undefined ? {} : { stable_id: check.stable_id }),
+  ...(check.legacy_id === undefined ? {} : { legacy_id: check.legacy_id }),
+  name: check.name,
+  status: "skip",
+  score: 0,
+  max_score: 0,
+  details: check.details ?? "",
+  exposure_status: check.status,
+});
+
+/** Searches the category checkpoints, then the training exposure checks. */
+export const findCheckpoint = (scan: ScanResult, id: string): Checkpoint | null => {
+  const scored = (scan.categories ?? []).flatMap((category) => category.checkpoints ?? []).find((cp) => matchesId(cp, id));
+  if (scored) return scored;
+  const exposure = (scan.training_exposure?.checks ?? []).find((check) => matchesId(check, id));
+  return exposure ? fromExposureCheck(exposure) : null;
+};
 
 /** Keeps the fail and partial checkpoints. Categories without one are left out. */
 export const filterFailing = (scan: ScanResult): ScanResult => {
@@ -86,9 +106,28 @@ export const filterFailing = (scan: ScanResult): ScanResult => {
   return { ...scan, categories };
 };
 
-/** Fills the `{domain}` and `{origin}` placeholders of a contract template. */
-export const fillPlaceholders = (template: string, domain: string): string =>
-  template.replaceAll("{origin}", `https://${domain}`).replaceAll("{domain}", domain);
+/** A host name with an optional port. No shell metacharacters, no leading hyphen. */
+const SAFE_HOST = /^[a-z0-9][a-z0-9.-]*(:\d+)?$/i;
+/** An origin: scheme and safe host, without a path. */
+const SAFE_ORIGIN = /^https?:\/\/([a-z0-9][a-z0-9.-]*(:\d+)?)$/i;
+
+/** Splits a host or an origin into its safe parts. Null when the value is not a strict host or origin. */
+const safeTarget = (value: string): { host: string; origin: string } | null => {
+  const origin = SAFE_ORIGIN.exec(value);
+  if (origin?.[1]) return { host: origin[1], origin: value };
+  return SAFE_HOST.test(value) ? { host: value, origin: `https://${value}` } : null;
+};
+
+/**
+ * Fills the `{domain}` and `{origin}` placeholders of a contract template.
+ * The result goes into a shell command that a user can copy, so the value must be
+ * a strict host name or origin. For any other value the placeholders stay as they are.
+ */
+export const fillPlaceholders = (template: string, domain: string): string => {
+  const target = safeTarget(domain);
+  if (!target) return template;
+  return template.replaceAll("{origin}", target.origin).replaceAll("{domain}", target.host);
+};
 
 const fail = (message: string, exitCode: ExitCode): { ok: false; error: CommandError } => ({
   ok: false,
@@ -108,6 +147,7 @@ const validateFilters = (filters: CheckpointFilters): CheckpointFilters => ({
   strength: filters.strength === undefined ? undefined : validateStrength(filters.strength),
   category: filters.category === undefined ? undefined : validateCategory(filters.category),
   ar: filters.ar === undefined ? undefined : validateArPractice(filters.ar),
+  version: filters.version === undefined ? undefined : validateMethodologyVersion(filters.version),
 });
 
 const CATALOG_MISSING = "The checkpoint catalog is not available on this server yet.";
@@ -160,6 +200,10 @@ export interface MethodologyOptions {
 
 export const runMethodology = async (options: MethodologyOptions): Promise<CommandResult<MethodologyView>> => {
   try {
+    if (options.changelog && options.scoring) throw new ValidationError("Use --changelog or --scoring, not both.");
+    if (options.changelog && options.version !== undefined) {
+      throw new ValidationError("Use --changelog without --version. The changelog covers all versions.");
+    }
     const version = options.version === undefined ? undefined : validateMethodologyVersion(options.version);
     try {
       if (options.changelog) return { ok: true, data: { kind: "changelog", document: await getMethodologyChangelog() } };
@@ -237,13 +281,34 @@ export const runResultsCheckpoint = async (domain: string, id: string): Promise<
   return { ok: true, data: { ...scanContext(fetched.scan, fetched.domain), checkpoint } };
 };
 
+/**
+ * What the status means for a fix loop. Only `fail` gives exit code 5.
+ * - pass: the checkpoint passes.
+ * - fail: the status is fail or partial and the checkpoint applies to the site.
+ * - not_applicable: the checkpoint does not apply to the site. Nothing to fix.
+ * - skipped: the scan did not run the checkpoint. Nothing to fix now.
+ * - informational: a training exposure check. It has no score. Nothing to fix.
+ */
+export type VerifyOutcome = "pass" | "fail" | "not_applicable" | "skipped" | "informational";
+
+const outcomeOf = (cp: Checkpoint): VerifyOutcome => {
+  if (cp.exposure_status !== undefined) return "informational";
+  if (cp.applicable === false) return "not_applicable";
+  if (cp.status === "pass") return "pass";
+  if (cp.status === "skip") return "skipped";
+  return "fail";
+};
+
 export interface VerifyReport {
   domain: string;
   checkpoint_id: string;
   legacy_id: string | null;
   name: string;
   status: CheckpointStatus;
+  /** The server status of a training exposure check. Null for a category checkpoint. */
+  exposure_status: string | null;
   passed: boolean;
+  outcome: VerifyOutcome;
   failure: Failure | null;
   /** The scan details text. The current server sends it in place of `failure`. */
   details: string;
@@ -320,6 +385,7 @@ export const runVerify = async (
     ? fillVerify(found.verify, cleanDomain)
     : { command: null, expect: null, rescan: `isagentready verify ${checkpointId} ${cleanDomain} --rescan` };
   const passed = cp.status === "pass";
+  const outcome = outcomeOf(cp);
 
   return {
     ok: true,
@@ -329,13 +395,15 @@ export const runVerify = async (
       legacy_id: legacyIdOf(cp),
       name: cp.name,
       status: cp.status,
+      exposure_status: cp.exposure_status ?? null,
       passed,
+      outcome,
       failure: cp.failure ?? null,
       details: cp.details,
       verify_source: found?.source ?? null,
       verify,
       command_executed: false,
     },
-    exitCode: isFailing(cp) ? EXIT.CHECK_FAILED : EXIT.SUCCESS,
+    exitCode: outcome === "fail" ? EXIT.CHECK_FAILED : EXIT.SUCCESS,
   };
 };

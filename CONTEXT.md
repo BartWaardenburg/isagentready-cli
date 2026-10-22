@@ -46,7 +46,7 @@ The contract fields for each checkpoint are `stage` (find, read, act), `strength
 
 `verify.command` is a read-only `curl` and `jq` check from the server. The CLI prints it and never runs it. Read the command before you run it. `verify.command` is null when no shell check is possible. `verify.rescan` is always present.
 
-`isagentready verify` exits 5 when the checkpoint status is fail or partial, and 0 when it is pass or skip.
+`isagentready verify` exits 5 when the checkpoint applies to the site and its status is fail or partial. It exits 0 in all other cases. Read the `outcome` field: `pass`, `fail`, `not_applicable`, `skipped` or `informational` (a training exposure check `te.1` to `te.5`, which has no score).
 
 ## Important Patterns
 
@@ -113,7 +113,7 @@ The schema also gives the exit codes and the output JSON shape of each command.
 | 2 | Validation error (invalid input) |
 | 3 | Scan failed |
 | 4 | Not found (no scan for the domain, or an unknown checkpoint id) |
-| 5 | `verify` only: the checkpoint status is fail or partial |
+| 5 | `verify` only: the checkpoint applies to the site and its status is fail or partial (`outcome` is `fail`) |
 
 ## Invariants
 

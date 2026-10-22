@@ -65,19 +65,20 @@ export const validateUrl = (input: string): string => {
 };
 
 const STABLE_ID = /^ia\.[a-z0-9]+(-[a-z0-9]+)*$/;
-const LEGACY_ID = /^\d{1,2}\.\d{1,2}$/;
+/** Category checks (`4.3`) and training exposure checks (`te.1`). */
+const LEGACY_ID = /^(\d{1,2}|te)\.\d{1,2}$/;
 const STAGES = ["find", "read", "act"] as const;
 const STRENGTHS = ["MUST", "SHOULD", "MAY"] as const;
 const AR_PRACTICE = /^AR-(FIND|READ|ACT)-\d{2}$/;
 const CATEGORY = /^[a-z][a-z0-9_]{0,63}$/;
 const METHODOLOGY_VERSION = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Accepts a stable id (`ia.<slug>`) or a legacy id (`4.3`). */
+/** Accepts a stable id (`ia.<slug>`) or a legacy id (`4.3` or `te.1`). */
 export const validateCheckpointId = (input: string): string => {
   const id = input.trim().toLowerCase();
   if (STABLE_ID.test(id) || LEGACY_ID.test(id)) return id;
   throw new ValidationError(
-    `Invalid checkpoint id: ${input}. Use a stable id such as ia.robots-txt or a legacy id such as 1.1.`
+    `Invalid checkpoint id: ${input}. Use a stable id such as ia.robots-txt or a legacy id such as 1.1 or te.1.`
   );
 };
 

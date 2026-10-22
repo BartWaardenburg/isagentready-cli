@@ -123,7 +123,11 @@ describe("validateCheckpointId", () => {
     expect(validateCheckpointId(" IA.Robots-Txt ")).toBe("ia.robots-txt");
   });
 
-  it.each(["", "ia.", "ia.bad_slug", "4", "4.3.1", "../4.3", "ia.x/../y", "ia.x?y"])("rejects %j", (id) => {
+  it.each(["te.1", "te.5", "TE.3"])("accepts the training exposure id %j", (id) => {
+    expect(validateCheckpointId(id)).toBe(id.toLowerCase());
+  });
+
+  it.each(["", "ia.", "ia.bad_slug", "4", "4.3.1", "../4.3", "ia.x/../y", "ia.x?y", "te.", "te.x", "tx.1", "te.1.2"])("rejects %j", (id) => {
     expect(() => validateCheckpointId(id)).toThrow(ValidationError);
   });
 });

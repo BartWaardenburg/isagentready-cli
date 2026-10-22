@@ -54,7 +54,7 @@ Get the latest scan results for a domain.
 isagentready results example.com
 isagentready results example.com --verbose
 isagentready results example.com --json --fields domain,overall_score,letter_grade
-isagentready results example.com --failing                       # Only fail and partial checkpoints
+isagentready results example.com --failing                       # Only fail and partial checkpoints that apply
 isagentready results example.com --checkpoint ia.a2a-agent-card  # One checkpoint (stable or legacy id)
 ```
 
@@ -73,7 +73,7 @@ isagentready checkpoints --ar AR-FIND-01
 
 ### `isagentready explain <id>`
 
-Show one checkpoint: why it matters, the fix steps, the verify command, the [agentready.org](https://www.agentready.org/) practice mapping and the fail rate in the latest benchmark. The id can be a stable id (`ia.robots-txt`) or a legacy id (`1.1`).
+Show one checkpoint: why it matters, the fix steps, the verify command, the [agentready.org](https://www.agentready.org/) practice mapping and the fail rate in the latest benchmark. The id can be a stable id (`ia.robots-txt`) or a legacy id (`1.1`, or `te.1` for a training exposure check).
 
 ```bash
 isagentready explain ia.a2a-agent-card
@@ -93,7 +93,7 @@ isagentready methodology --scoring             # Category weights and grade band
 
 ### `isagentready verify <id> <domain>`
 
-Get the status of one checkpoint and print its read-only verify command. The CLI prints the command for you to run. It never runs the command. The exit code is 5 when the status is fail or partial.
+Get the status of one checkpoint and print its read-only verify command. The CLI prints the command for you to run. It never runs the command. The exit code is 5 when the checkpoint applies to the site and its status is fail or partial. In all other cases the exit code is 0. The `outcome` field in the JSON output tells you why: `pass`, `fail`, `not_applicable`, `skipped` or `informational`.
 
 ```bash
 isagentready verify ia.a2a-agent-card example.com
@@ -197,7 +197,7 @@ All inputs are validated against adversarial patterns (path traversal, control c
 | 2 | Validation error (invalid input) |
 | 3 | Scan failed |
 | 4 | Not found |
-| 5 | `verify`: the checkpoint status is fail or partial |
+| 5 | `verify`: the checkpoint applies to the site and its status is fail or partial |
 
 ### Agent guidance
 

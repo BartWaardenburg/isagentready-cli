@@ -119,6 +119,11 @@ export interface Checkpoint
   failure?: Failure | null;
   score_impact?: ScoreImpact | null;
   priority?: string | null;
+  /**
+   * Set by the CLI for a training exposure check. These checks have no score,
+   * so `status` is "skip" and this field holds the server status (for example not_found).
+   */
+  exposure_status?: string;
 }
 
 /** Checkpoint result with the full contract fields. */
@@ -180,6 +185,23 @@ export interface SpecAlignment {
   license?: string;
 }
 
+/** One training exposure check (`te.1` to `te.5`). The server does not score these checks. */
+export interface TrainingExposureCheck {
+  id: string;
+  stable_id?: string;
+  legacy_id?: string;
+  name: string;
+  /** For example found, not_found, partial, fail or unknown. */
+  status: string;
+  details?: string;
+  extra?: unknown;
+}
+
+export interface TrainingExposure {
+  summary?: string;
+  checks?: TrainingExposureCheck[];
+}
+
 export interface ScanResult {
   id: string;
   domain: string;
@@ -194,6 +216,7 @@ export interface ScanResult {
   /** Seconds the server asks a client to wait before the next poll. */
   retry_after?: number;
   issues?: Issue[];
+  training_exposure?: TrainingExposure;
   profiles?: Record<string, ProfileResult>;
   methodology_version?: string;
   score_context?: ScoreContext;
@@ -255,6 +278,8 @@ export interface CheckpointFilters {
   strength?: string;
   category?: string;
   ar?: string;
+  /** Methodology version (YYYY-MM-DD). Default: current. */
+  version?: string;
 }
 
 export interface ScanResultOptions {
@@ -359,9 +384,9 @@ const unwrapList = (body: unknown, key: string): Record<string, unknown> => {
 const unwrapItem = <T>(body: unknown, key: string): T =>
   (isRecord(body) && isRecord(body[key]) ? body[key] : body) as T;
 
-const CHECKPOINT_FILTER_KEYS = ["stage", "strength", "category", "ar"] as const;
+const CHECKPOINT_FILTER_KEYS = ["stage", "strength", "category", "ar", "version"] as const;
 
-/** Lists checkpoint definitions. The server filters on stage, strength, category and AR practice. */
+/** Lists checkpoint definitions. The server filters on stage, strength, category, AR practice and methodology version. */
 export const listCheckpoints = async (filters: CheckpointFilters = {}): Promise<CheckpointList> => {
   const params = new URLSearchParams();
   for (const key of CHECKPOINT_FILTER_KEYS) {

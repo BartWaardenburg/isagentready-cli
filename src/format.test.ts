@@ -290,6 +290,28 @@ describe("formatScanResult with contract fields", () => {
     expect(result).toContain("curl -sf https://example.com/.well-known/agent-card.json");
   });
 
+  it("keeps the placeholders when the scan domain is not a strict host name", () => {
+    const unsafe = { ...contractScan, domain: "example.com;touch /tmp/x" };
+    const result = strip(formatScanResult(unsafe, true));
+    expect(result).toContain("curl -sf https://{domain}/.well-known/agent-card.json");
+    expect(result).not.toContain("touch /tmp/x/");
+  });
+
+  it("does not count a checkpoint that does not apply as failing", () => {
+    const result = strip(formatFailingResult(filterFailing(legacyScan)));
+    expect(result).not.toContain("OAuth Discovery");
+  });
+
+  it("shows the server status of a training exposure check", () => {
+    const result = strip(formatCheckpointResult("example.com", findCheckpoint(legacyScan, "te.3")!));
+    expect(result).toContain("not_found  training exposure, not scored");
+  });
+
+  it("marks a checkpoint that does not apply", () => {
+    const result = strip(formatCheckpointResult("example.com", findCheckpoint(legacyScan, "5.12")!));
+    expect(result).toContain("fail  0/0  not applicable");
+  });
+
   it("shows no fix steps for a passing checkpoint in verbose mode", () => {
     const result = strip(formatScanResult(contractScan, true));
     expect(result).not.toContain("WebMCP tools found\n      Fix");
@@ -464,6 +486,8 @@ describe("formatVerifyReport", () => {
     command_executed: false,
     completed_at: "2026-10-20T10:30:00Z",
     methodology_version: "2026-09-02",
+    exposure_status: null,
+    outcome: "fail",
   };
 
   it("shows the status and prints the command without a claim that it ran", () => {
@@ -486,6 +510,29 @@ describe("formatVerifyReport", () => {
     );
     expect(result).toContain("The server sends no verify command for this checkpoint yet.");
     expect(result).not.toContain("No shell check exists");
+  });
+
+  it("adds no outcome note for a fail", () => {
+    expect(strip(formatVerifyReport(report))).not.toContain("Nothing to fix");
+  });
+
+  it("says that a checkpoint that does not apply needs no fix", () => {
+    const result = strip(formatVerifyReport({ ...report, outcome: "not_applicable" }));
+    expect(result).toContain("This checkpoint does not apply to this site. Nothing to fix.");
+    expect(result).not.toContain("✗");
+  });
+
+  it("says that a skipped checkpoint needs no fix now", () => {
+    const result = strip(formatVerifyReport({ ...report, status: "skip", outcome: "skipped" }));
+    expect(result).toContain("The scan did not run this checkpoint. Nothing to fix now.");
+  });
+
+  it("shows the server status of a training exposure check", () => {
+    const result = strip(
+      formatVerifyReport({ ...report, status: "skip", exposure_status: "not_found", outcome: "informational" })
+    );
+    expect(result).toContain("not_found on example.com");
+    expect(result).toContain("Training exposure check. It has no score. Nothing to fix.");
   });
 
   it("explains when no shell check exists", () => {

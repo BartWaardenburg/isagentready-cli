@@ -83,6 +83,26 @@ describe("findCheckpoint", () => {
   it("returns null for an unknown id", () => {
     expect(findCheckpoint(contractScan, "ia.nope")).toBeNull();
   });
+
+  it("finds a training exposure check and keeps its server status", () => {
+    expect(findCheckpoint(legacyScan, "te.3")).toEqual({
+      id: "te.3",
+      name: "TDMRep declaration",
+      status: "skip",
+      score: 0,
+      max_score: 0,
+      details: "No TDMRep file found at /.well-known/tdmrep.json.",
+      exposure_status: "not_found",
+    });
+  });
+
+  it("finds a training exposure check by the stable id that the server sends", () => {
+    const scan: ScanResult = {
+      ...legacyScan,
+      training_exposure: { checks: [{ id: "te.4", stable_id: "ia.ai-txt", name: "ai.txt policy", status: "found" }] },
+    };
+    expect(findCheckpoint(scan, "ia.ai-txt")).toMatchObject({ stable_id: "ia.ai-txt", exposure_status: "found" });
+  });
 });
 
 describe("filterFailing", () => {
@@ -91,6 +111,11 @@ describe("filterFailing", () => {
     const ids = filtered.categories!.flatMap((c) => c.checkpoints.map((cp) => cp.id));
     expect(ids).toEqual(["1.3", "4.3"]);
     expect(filtered.domain).toBe("example.com");
+  });
+
+  it("leaves out a fail checkpoint that does not apply to the site", () => {
+    const ids = filterFailing(legacyScan).categories!.flatMap((c) => c.checkpoints.map((cp) => cp.id));
+    expect(ids).not.toContain("5.12");
   });
 
   it("does not change the input", () => {
@@ -105,6 +130,39 @@ describe("fillPlaceholders", () => {
       "curl https://example.com/x && echo example.com"
     );
   });
+
+  it("accepts a host with a port", () => {
+    expect(fillPlaceholders("curl {origin}/x {domain}", "localhost:4000")).toBe(
+      "curl https://localhost:4000/x localhost:4000"
+    );
+  });
+
+  it.each([
+    ["https://example.com", "curl https://example.com/x example.com"],
+    ["http://localhost:4000", "curl http://localhost:4000/x localhost:4000"],
+  ])("accepts the origin %j", (value, expected) => {
+    expect(fillPlaceholders("curl {origin}/x {domain}", value)).toBe(expected);
+  });
+
+  it.each([
+    "example.com; rm -rf ~",
+    "example.com && curl evil.test",
+    "$(id).example.com",
+    "`id`.example.com",
+    "example.com|sh",
+    "example.com x",
+    "'example.com'",
+    "example.com\nid",
+    "-oProxyCommand=id",
+    "https://example.com/path",
+    "https://example.com;id",
+    "ftp://example.com",
+    "example.com:80a",
+    "",
+  ])("keeps the placeholders for the unsafe value %j", (value) => {
+    const template = "curl -sf {origin}/x | grep {domain}";
+    expect(fillPlaceholders(template, value)).toBe(template);
+  });
 });
 
 describe("runCheckpoints", () => {
@@ -115,6 +173,21 @@ describe("runCheckpoints", () => {
 
     expect(result).toEqual({ ok: true, data: checkpointList });
     expect(requestedUrls()[0]).toContain("/api/v2/checkpoints?stage=act");
+  });
+
+  it("sends the methodology version filter", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(checkpointList));
+
+    await runCheckpoints({ version: "2026-09-02" });
+
+    expect(requestedUrls()[0]).toContain("/api/v2/checkpoints?version=2026-09-02");
+  });
+
+  it("rejects an invalid version filter without a request", async () => {
+    const result = await runCheckpoints({ version: "latest" });
+
+    expect(result).toMatchObject({ ok: false, error: { exitCode: EXIT.VALIDATION } });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid filter without a request", async () => {
@@ -195,6 +268,16 @@ describe("runMethodology", () => {
     const result = await runMethodology({ changelog: true });
 
     expect(result).toEqual({ ok: true, data: { kind: "changelog", document: changelog } });
+  });
+
+  it.each([
+    [{ changelog: true, version: "2026-09-02" }, "Use --changelog without --version. The changelog covers all versions."],
+    [{ changelog: true, scoring: true }, "Use --changelog or --scoring, not both."],
+  ])("rejects the option mix %j without a request", async (options, message) => {
+    const result = await runMethodology(options);
+
+    expect(result).toEqual({ ok: false, error: { exitCode: EXIT.VALIDATION, message } });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("returns the scoring document of a version", async () => {
@@ -288,7 +371,9 @@ describe("runVerify", () => {
         legacy_id: "4.3",
         name: "A2A Agent Card",
         status: "fail",
+        exposure_status: null,
         passed: false,
+        outcome: "fail",
         failure: expect.objectContaining({ reason_code: "agent_card_missing" }),
         details: "No agent card found",
         verify_source: "scan",
@@ -310,7 +395,49 @@ describe("runVerify", () => {
 
     const result = await runVerify("ia.webmcp", "example.com");
 
-    expect(result).toMatchObject({ ok: true, data: { status: "pass", passed: true }, exitCode: EXIT.SUCCESS });
+    expect(result).toMatchObject({
+      ok: true,
+      data: { status: "pass", passed: true, outcome: "pass" },
+      exitCode: EXIT.SUCCESS,
+    });
+  });
+
+  it("exits with success for a fail checkpoint that does not apply to the site", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(scanLegacy)).mockResolvedValueOnce(jsonResponse({}, 404));
+
+    const result = await runVerify("5.12", "example.com");
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: { status: "fail", passed: false, outcome: "not_applicable" },
+      exitCode: EXIT.SUCCESS,
+    });
+  });
+
+  it("finds a training exposure check and reports it as informational", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(scanLegacy)).mockResolvedValueOnce(jsonResponse({}, 404));
+
+    const result = await runVerify("te.3", "example.com");
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        checkpoint_id: "te.3",
+        status: "skip",
+        exposure_status: "not_found",
+        passed: false,
+        outcome: "informational",
+      },
+      exitCode: EXIT.SUCCESS,
+    });
+  });
+
+  it("finds a training exposure check for results --checkpoint", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(scanLegacy));
+
+    const result = await runResultsCheckpoint("example.com", "te.1");
+
+    expect(result).toMatchObject({ ok: true, data: { checkpoint: { id: "te.1", exposure_status: "unknown" } } });
   });
 
   it("gets the verify data from the catalog when the scan has no contract fields", async () => {
