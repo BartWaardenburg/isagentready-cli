@@ -454,6 +454,8 @@ describe("formatVerifyReport", () => {
     status: "fail",
     passed: false,
     failure: { reason_code: "agent_card_missing", message: "No agent card found.", observed: {}, expected: null },
+    details: "Legacy details",
+    verify_source: "scan",
     verify: {
       command: "curl -sf https://example.com/.well-known/agent-card.json",
       expect: "exit code 0",
@@ -472,6 +474,18 @@ describe("formatVerifyReport", () => {
     expect(result).toContain("curl -sf https://example.com/.well-known/agent-card.json");
     expect(result).toContain("Expect: exit code 0");
     expect(result).toContain("Scan from 2026-10-20T10:30:00Z");
+  });
+
+  it("shows the details when the server sends no failure", () => {
+    expect(strip(formatVerifyReport({ ...report, failure: null }))).toContain("Legacy details");
+  });
+
+  it("says when the server has no verify data yet", () => {
+    const result = strip(
+      formatVerifyReport({ ...report, verify_source: null, verify: { ...report.verify, command: null } })
+    );
+    expect(result).toContain("The server sends no verify command for this checkpoint yet.");
+    expect(result).not.toContain("No shell check exists");
   });
 
   it("explains when no shell check exists", () => {

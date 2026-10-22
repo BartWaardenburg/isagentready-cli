@@ -110,11 +110,24 @@ const validateFilters = (filters: CheckpointFilters): CheckpointFilters => ({
   ar: filters.ar === undefined ? undefined : validateArPractice(filters.ar),
 });
 
+const CATALOG_MISSING = "The checkpoint catalog is not available on this server yet.";
+
+/** A 404 on one id can also mean that the server has no catalog yet. */
+const catalogExists = async (): Promise<boolean> => {
+  try {
+    await listCheckpoints();
+    return true;
+  } catch (err) {
+    if (isNotFound(err)) return false;
+    throw err;
+  }
+};
+
 export const runCheckpoints = async (filters: CheckpointFilters): Promise<CommandResult<CheckpointList>> => {
   try {
     return { ok: true, data: await listCheckpoints(validateFilters(filters)) };
   } catch (err) {
-    if (isNotFound(err)) return fail("The checkpoint catalog is not available on this server yet.", EXIT.NOT_FOUND);
+    if (isNotFound(err)) return fail(CATALOG_MISSING, EXIT.NOT_FOUND);
     return toFailure(err);
   }
 };
@@ -126,6 +139,7 @@ export const runExplain = async (id: string): Promise<CommandResult<CheckpointDe
       return { ok: true, data: await getCheckpoint(cleanId) };
     } catch (err) {
       if (!isNotFound(err)) throw err;
+      if (!(await catalogExists())) return fail(CATALOG_MISSING, EXIT.NOT_FOUND);
       return fail(`Unknown checkpoint id: ${cleanId}. Run isagentready checkpoints for the list.`, EXIT.NOT_FOUND);
     }
   } catch (err) {
@@ -231,6 +245,10 @@ export interface VerifyReport {
   status: CheckpointStatus;
   passed: boolean;
   failure: Failure | null;
+  /** The scan details text. The current server sends it in place of `failure`. */
+  details: string;
+  /** Where the verify data comes from. Null when the server sends none. */
+  verify_source: "scan" | "catalog" | null;
   /** Read-only check for the user. The CLI prints it and never runs it. */
   verify: Verify;
   command_executed: false;
@@ -245,11 +263,15 @@ export interface VerifyOptions {
 }
 
 /** The scan result has no verify data on the current server. The catalog has it. */
-const lookupVerify = async (cp: Checkpoint): Promise<{ verify: Verify; stableId: string | null } | null> => {
-  if (cp.verify) return { verify: cp.verify, stableId: stableIdOf(cp) };
+const lookupVerify = async (
+  cp: Checkpoint
+): Promise<{ verify: Verify; stableId: string | null; source: "scan" | "catalog" } | null> => {
+  if (cp.verify) return { verify: cp.verify, stableId: stableIdOf(cp), source: "scan" };
   try {
     const definition = await getCheckpoint(stableIdOf(cp) ?? cp.id);
-    return definition.verify ? { verify: definition.verify, stableId: stableIdOf(definition) } : null;
+    return definition.verify
+      ? { verify: definition.verify, stableId: stableIdOf(definition), source: "catalog" }
+      : null;
   } catch {
     return null;
   }
@@ -309,6 +331,8 @@ export const runVerify = async (
       status: cp.status,
       passed,
       failure: cp.failure ?? null,
+      details: cp.details,
+      verify_source: found?.source ?? null,
       verify,
       command_executed: false,
     },

@@ -146,7 +146,9 @@ describe("runExplain", () => {
   });
 
   it("exits with not found for an unknown id", async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse({ detail: "Unknown checkpoint" }, 404));
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ detail: "Unknown checkpoint" }, 404))
+      .mockResolvedValueOnce(jsonResponse(checkpointList));
 
     const result = await runExplain("ia.nope");
 
@@ -156,6 +158,17 @@ describe("runExplain", () => {
         exitCode: EXIT.NOT_FOUND,
         message: "Unknown checkpoint id: ia.nope. Run isagentready checkpoints for the list.",
       },
+    });
+  });
+
+  it("says when the server has no checkpoint catalog", async () => {
+    mockFetch.mockResolvedValue(jsonResponse({ error: "not_found" }, 404));
+
+    const result = await runExplain("ia.robots-txt");
+
+    expect(result).toEqual({
+      ok: false,
+      error: { exitCode: EXIT.NOT_FOUND, message: "The checkpoint catalog is not available on this server yet." },
     });
   });
 
@@ -277,6 +290,8 @@ describe("runVerify", () => {
         status: "fail",
         passed: false,
         failure: expect.objectContaining({ reason_code: "agent_card_missing" }),
+        details: "No agent card found",
+        verify_source: "scan",
         verify: {
           command: "curl -sf https://example.com/.well-known/agent-card.json | jq -e '.name and .url'",
           expect: "exit code 0",
@@ -306,7 +321,11 @@ describe("runVerify", () => {
     expect(requestedUrls()[1]).toContain("/api/v2/checkpoints/4.3");
     expect(result).toMatchObject({
       ok: true,
-      data: { checkpoint_id: "ia.a2a-agent-card", verify: { command: expect.stringContaining("https://example.com/") } },
+      data: {
+        checkpoint_id: "ia.a2a-agent-card",
+        verify_source: "catalog",
+        verify: { command: expect.stringContaining("https://example.com/") },
+      },
     });
   });
 
@@ -320,6 +339,8 @@ describe("runVerify", () => {
       data: {
         checkpoint_id: "4.3",
         status: "fail",
+        details: "No agent card found",
+        verify_source: null,
         verify: { command: null, expect: null, rescan: "isagentready verify 4.3 example.com --rescan" },
       },
     });

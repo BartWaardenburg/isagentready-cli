@@ -221,13 +221,16 @@ export const formatVerifyReport = (report: VerifyReport): string => {
     `  ${statusIcon(report.status)} ${bold(report.name)}  ${dim(report.checkpoint_id)}`,
     `    ${report.status} on ${report.domain}`,
   ];
-  if (report.failure?.message) lines.push(`    ${truncate(report.failure.message, MESSAGE_WIDTH)}`);
+  const message = report.failure?.message ?? report.details;
+  if (message) lines.push(`    ${truncate(message, MESSAGE_WIDTH)}`);
   lines.push("");
 
   if (report.verify.command) {
     lines.push("  Run this read-only check yourself. isagentready does not run it.");
     lines.push(`    ${cyan(report.verify.command)}`);
     if (report.verify.expect) lines.push(`    ${dim(`Expect: ${report.verify.expect}`)}`);
+  } else if (report.verify_source === null) {
+    lines.push("  The server sends no verify command for this checkpoint yet.");
   } else {
     lines.push("  No shell check exists for this checkpoint.");
   }
