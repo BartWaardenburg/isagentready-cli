@@ -1,0 +1,20 @@
+{
+  "changelog": [
+    {
+      "version": "2026-11-02",
+      "date": "2026-11-02",
+      "summary": "Adds seven checks.",
+      "introduced": ["ia.mcp-apps", "ia.nlweb"],
+      "revised": [],
+      "retired": []
+    },
+    {
+      "version": "2026-09-02",
+      "date": "2026-09-02",
+      "summary": "Revises the A2A agent card check.",
+      "introduced": [],
+      "revised": ["ia.a2a-agent-card"],
+      "retired": []
+    }
+  ]
+}

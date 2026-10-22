@@ -1,5 +1,21 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { getScanResults, startScan, getRankings, pollUntilComplete, ApiError } from "./api.js";
+import {
+  getScanResults,
+  startScan,
+  getRankings,
+  pollUntilComplete,
+  listCheckpoints,
+  getCheckpoint,
+  getMethodology,
+  getMethodologyChangelog,
+  getMethodologyScoring,
+  ApiError,
+} from "./api.js";
+import definition from "./fixtures/checkpoint-definition.json" with { type: "json" };
+import checkpointList from "./fixtures/checkpoints-list.json" with { type: "json" };
+import methodology from "./fixtures/methodology.json" with { type: "json" };
+import changelog from "./fixtures/changelog.json" with { type: "json" };
+import scoring from "./fixtures/scoring.json" with { type: "json" };
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
@@ -303,5 +319,143 @@ describe("pollUntilComplete", () => {
     );
 
     await expect(pollUntilComplete("example.com")).rejects.toThrow("Scan failed");
+  });
+});
+
+const calledUrl = (): string => String(mockFetch.mock.calls[0]![0]);
+
+describe("getScanResults contract options", () => {
+  it("asks for failing checkpoints with the contract fields", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(completedScan));
+
+    await getScanResults("example.com", { failing: true, contract: true });
+
+    expect(calledUrl()).toMatch(/\/api\/v1\/scan\/example\.com\?checkpoints=failing&include=contract$/);
+  });
+
+  it("sends no query string without options", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(completedScan));
+
+    await getScanResults("example.com");
+
+    expect(calledUrl()).toMatch(/\/api\/v1\/scan\/example\.com$/);
+  });
+});
+
+describe("listCheckpoints", () => {
+  it("fetches the catalog without filters", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(checkpointList));
+
+    const result = await listCheckpoints();
+
+    expect(result).toEqual(checkpointList);
+    expect(calledUrl()).toMatch(/\/api\/v2\/checkpoints$/);
+  });
+
+  it("sends the filters as query parameters", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(checkpointList));
+
+    await listCheckpoints({ stage: "act", strength: "MAY", category: "agent_protocols", ar: "AR-READ-06" });
+
+    const url = new URL(calledUrl());
+    expect(url.pathname).toBe("/api/v2/checkpoints");
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      stage: "act",
+      strength: "MAY",
+      category: "agent_protocols",
+      ar: "AR-READ-06",
+    });
+  });
+
+  it("accepts a bare array from the server", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(checkpointList.checkpoints));
+
+    const result = await listCheckpoints();
+
+    expect(result.checkpoints).toHaveLength(2);
+  });
+});
+
+describe("getCheckpoint", () => {
+  it("fetches one definition by stable id", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(definition));
+
+    const result = await getCheckpoint("ia.a2a-agent-card");
+
+    expect(result.id).toBe("ia.a2a-agent-card");
+    expect(calledUrl()).toMatch(/\/api\/v2\/checkpoints\/ia\.a2a-agent-card$/);
+  });
+
+  it("accepts a legacy id", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(definition));
+
+    await getCheckpoint("4.3");
+
+    expect(calledUrl()).toMatch(/\/api\/v2\/checkpoints\/4\.3$/);
+  });
+
+  it("unwraps a definition in a checkpoint envelope", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({ checkpoint: definition }));
+
+    const result = await getCheckpoint("4.3");
+
+    expect(result.legacy_id).toBe("4.3");
+  });
+
+  it("throws ApiError with the problem detail on 404", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ title: "Not Found", detail: "Unknown checkpoint: ia.nope" }, 404)
+    );
+
+    const error = await getCheckpoint("ia.nope").catch((err: unknown) => err);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(404);
+    expect((error as ApiError).message).toBe("Unknown checkpoint: ia.nope");
+  });
+});
+
+describe("methodology", () => {
+  it("fetches the current methodology", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(methodology));
+
+    const result = await getMethodology();
+
+    expect(result.version).toBe("2026-11-02");
+    expect(calledUrl()).toMatch(/\/api\/v2\/methodology$/);
+  });
+
+  it("fetches one methodology version", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(methodology));
+
+    await getMethodology("2026-09-02");
+
+    expect(calledUrl()).toMatch(/\/api\/v2\/methodology\/2026-09-02$/);
+  });
+
+  it("fetches the changelog", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(changelog));
+
+    const result = await getMethodologyChangelog();
+
+    expect(result.changelog).toHaveLength(2);
+    expect(calledUrl()).toMatch(/\/api\/v2\/methodology\/changelog$/);
+  });
+
+  it("accepts a bare changelog array", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(changelog.changelog));
+
+    const result = await getMethodologyChangelog();
+
+    expect(result.changelog[0]!.version).toBe("2026-11-02");
+  });
+
+  it("fetches the scoring document of a version", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(scoring));
+
+    const result = await getMethodologyScoring("2026-11-02");
+
+    expect(result.grade_bands?.[0]?.grade).toBe("A+");
+    expect(calledUrl()).toMatch(/\/api\/v2\/methodology\/2026-11-02\/scoring$/);
   });
 });

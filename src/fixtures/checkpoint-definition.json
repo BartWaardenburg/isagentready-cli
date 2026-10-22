@@ -1,0 +1,46 @@
+{
+  "id": "ia.a2a-agent-card",
+  "legacy_id": "4.3",
+  "ar_practice_ids": ["AR-READ-06"],
+  "ar_mapping": "partial",
+  "name": "A2A Agent Card",
+  "category": "agent_protocols",
+  "stage": "act",
+  "strength": "MAY",
+  "evidence_type": "recommendation",
+  "evidence_source": { "title": "agentready.org AR-READ-06", "url": "https://www.agentready.org/#read" },
+  "evidence_tier": "emerging",
+  "score_role": "bonus",
+  "maturity": "emerging",
+  "profiles": ["api_tool_readiness"],
+  "applicability": { "mode": "always", "surfaces": ["api"], "condition": null },
+  "why": "Agents use the agent card to find the skills and the endpoint of an A2A agent.",
+  "references": [{ "title": "A2A specification", "url": "https://a2a-protocol.org/latest/specification/", "kind": "spec" }],
+  "fix": {
+    "summary": "Publish an agent card at /.well-known/agent-card.json.",
+    "steps": [
+      {
+        "order": 1,
+        "action": "Create the agent card JSON file.",
+        "code_example": "{\"name\":\"Example\",\"url\":\"https://example.com/a2a\"}",
+        "language": "json"
+      },
+      { "order": 2, "action": "Serve the file with Content-Type application/json.", "code_example": null, "language": null }
+    ],
+    "skill": { "name": "agent-protocols", "anchor": "ia.a2a-agent-card" }
+  },
+  "verify": {
+    "command": "curl -sf https://{domain}/.well-known/agent-card.json | jq -e '.name and .url'",
+    "expect": "exit code 0",
+    "rescan": "isagentready results {domain} --checkpoint ia.a2a-agent-card"
+  },
+  "lifecycle": { "introduced": "2026-08-24", "revised": ["2026-09-02"], "retired": null, "replaced_by": null },
+  "methodology_version": "2026-09-02",
+  "detail_url": "https://isagentready.com/en/methodology/checkpoints/ia.a2a-agent-card",
+  "aggregate": {
+    "benchmark_version": "2026-q3",
+    "denominator": 4210,
+    "rates": { "pass": 0.04, "partial": 0.02, "fail": 0.94, "skip": 0.0 },
+    "source_url": "https://isagentready.com/en/research/state-of-agent-ready-web/2026-q3"
+  }
+}
