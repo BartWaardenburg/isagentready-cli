@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { validateDomain, validateUrl, ValidationError } from "./validate.js";
+import {
+  validateDomain,
+  validateUrl,
+  validateCheckpointId,
+  validateStage,
+  validateStrength,
+  validateArPractice,
+  validateCategory,
+  validateMethodologyVersion,
+  ValidationError,
+} from "./validate.js";
 
 describe("validateDomain", () => {
   it("accepts a valid domain", () => {
@@ -97,5 +107,65 @@ describe("validateUrl", () => {
 
   it("rejects invalid URLs", () => {
     expect(() => validateUrl("not a url at all")).toThrow(ValidationError);
+  });
+});
+
+describe("validateCheckpointId", () => {
+  it("accepts a stable id", () => {
+    expect(validateCheckpointId("ia.a2a-agent-card")).toBe("ia.a2a-agent-card");
+  });
+
+  it("accepts a legacy id", () => {
+    expect(validateCheckpointId("4.3")).toBe("4.3");
+  });
+
+  it("normalizes case and whitespace", () => {
+    expect(validateCheckpointId(" IA.Robots-Txt ")).toBe("ia.robots-txt");
+  });
+
+  it.each(["", "ia.", "ia.bad_slug", "4", "4.3.1", "../4.3", "ia.x/../y", "ia.x?y"])("rejects %j", (id) => {
+    expect(() => validateCheckpointId(id)).toThrow(ValidationError);
+  });
+});
+
+describe("checkpoint filters", () => {
+  it("normalizes a stage", () => {
+    expect(validateStage("Read")).toBe("read");
+  });
+
+  it("rejects an unknown stage", () => {
+    expect(() => validateStage("browse")).toThrow("Invalid stage: browse. Use find, read or act.");
+  });
+
+  it("normalizes a strength", () => {
+    expect(validateStrength("should")).toBe("SHOULD");
+  });
+
+  it("rejects an unknown strength", () => {
+    expect(() => validateStrength("COULD")).toThrow(ValidationError);
+  });
+
+  it("normalizes an AR practice id", () => {
+    expect(validateArPractice("ar-find-01")).toBe("AR-FIND-01");
+  });
+
+  it("rejects a malformed AR practice id", () => {
+    expect(() => validateArPractice("AR-FIND-1")).toThrow(ValidationError);
+  });
+
+  it("accepts a category slug", () => {
+    expect(validateCategory("agent_protocols")).toBe("agent_protocols");
+  });
+
+  it("rejects a category with unsafe characters", () => {
+    expect(() => validateCategory("agent&x=1")).toThrow(ValidationError);
+  });
+
+  it("accepts a methodology version date", () => {
+    expect(validateMethodologyVersion("2026-09-02")).toBe("2026-09-02");
+  });
+
+  it("rejects a malformed methodology version", () => {
+    expect(() => validateMethodologyVersion("latest")).toThrow(ValidationError);
   });
 });
