@@ -98,3 +98,53 @@ describe("applyFieldMask", () => {
     expect(applyFieldMask(data, "foo,bar")).toEqual({});
   });
 });
+
+describe("applyFieldMask nested paths", () => {
+  const scan = {
+    domain: "example.com",
+    overall_score: 72,
+    categories: [
+      {
+        label: "Agent Protocols",
+        weight: 15,
+        checkpoints: [
+          { id: "4.3", status: "fail", failure: { reason_code: "agent_card_missing", message: "x" } },
+          { id: "4.1", status: "pass", failure: null },
+        ],
+      },
+    ],
+  };
+
+  it("selects a field in each array element", () => {
+    expect(applyFieldMask(scan, "domain,categories.checkpoints.status")).toEqual({
+      domain: "example.com",
+      categories: [{ checkpoints: [{ status: "fail" }, { status: "pass" }] }],
+    });
+  });
+
+  it("merges paths that share a prefix", () => {
+    expect(applyFieldMask(scan, "categories.label,categories.checkpoints.id")).toEqual({
+      categories: [{ label: "Agent Protocols", checkpoints: [{ id: "4.3" }, { id: "4.1" }] }],
+    });
+  });
+
+  it("keeps the full value when a short path and a long path overlap", () => {
+    expect(applyFieldMask(scan, "categories,categories.label")).toEqual({ categories: scan.categories });
+  });
+
+  it("keeps null values and skips paths into scalar values", () => {
+    expect(applyFieldMask(scan, "categories.checkpoints.failure.reason_code,overall_score.x")).toEqual({
+      categories: [{ checkpoints: [{ failure: { reason_code: "agent_card_missing" } }, { failure: null }] }],
+    });
+  });
+
+  it("applies the mask to each element of a top-level array", () => {
+    expect(applyFieldMask([{ id: "a", x: 1 }, { id: "b", x: 2 }], "id")).toEqual([{ id: "a" }, { id: "b" }]);
+  });
+
+  it("ignores prototype keys", () => {
+    const masked = applyFieldMask({ a: 1 }, "__proto__.polluted,constructor") as Record<string, unknown>;
+    expect(masked).toEqual({});
+    expect(({} as Record<string, unknown>)["polluted"]).toBeUndefined();
+  });
+});
