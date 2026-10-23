@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+# [0.3.0](https://github.com/BartWaardenburg/isagentready-cli/compare/v0.2.2...v0.3.0) (2026-10-23)
+
+
+### Bug Fixes
+
+* give clearer verify and explain messages on the current server ([58684c2](https://github.com/BartWaardenburg/isagentready-cli/commit/58684c212edbdfe6c4664de037d694e9a00a6dcb))
+* handle te ids, non-applicable checkpoints and unsafe placeholder values ([5018f52](https://github.com/BartWaardenburg/isagentready-cli/commit/5018f5252e8ad4eeddcd2ef57ad99e31f4e8ff4f))
+
 
 ### Features
 
