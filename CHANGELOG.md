@@ -1,6 +1,8 @@
 # Changelog
 
-# [0.3.0](https://github.com/BartWaardenburg/isagentready-cli/compare/v0.2.2...v0.3.0) (2026-10-23)
+## Unreleased
+
+## [0.3.0](https://github.com/BartWaardenburg/isagentready-cli/compare/v0.2.2...v0.3.0) (2026-10-23)
 
 
 ### Bug Fixes
