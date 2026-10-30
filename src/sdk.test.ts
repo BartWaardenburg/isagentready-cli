@@ -221,6 +221,85 @@ it("exposes an HTTP-date retry wait and rejects malformed retry hints", async ()
   }
 });
 
+it("validates every poll response before reporting progress or waiting", async () => {
+  const completed = { id: "scan-4", domain: "example.com", status: "completed" };
+
+  for (const malformed of [
+    {},
+    { ...completed, status: "mystery" },
+    { ...completed, status: "running", retry_after: "soon" },
+    { ...completed, status: "running", retry_after: -1 },
+  ]) {
+    const responses = [malformed, completed];
+    const client = createClient({ fetch: async (): Promise<Response> => json(responses.shift()) });
+    const progress = vi.fn();
+    const sleep = vi.fn(async (): Promise<void> => {});
+
+    expect(await client.pollUntilComplete("example.com", progress, { sleep })).toMatchObject({
+      ok: false,
+      error: { kind: "invalid_response" },
+    });
+    expect(progress).not.toHaveBeenCalled();
+    expect(sleep).not.toHaveBeenCalled();
+  }
+
+  const responses = [{ ...completed, status: "running", retry_after: 2 }, completed];
+  const client = createClient({ fetch: async (): Promise<Response> => json(responses.shift()) });
+  const progress = vi.fn();
+  const sleep = vi.fn(async (_milliseconds: number): Promise<void> => {});
+
+  expect(await client.pollUntilComplete("example.com", progress, { sleep })).toEqual({
+    ok: true,
+    data: completed,
+  });
+  expect(progress.mock.calls).toEqual([["running"]]);
+  expect(sleep.mock.calls).toEqual([[2000]]);
+});
+
+it("bounds stalled poll requests and response decoding by the polling deadline", async () => {
+  for (const stalled of ["request", "body"]) {
+    vi.useFakeTimers();
+    try {
+      const signals: Array<AbortSignal | null> = [];
+      const transport: typeof fetch = async (_input, init): Promise<Response> => {
+        signals.push(init?.signal ?? null);
+        if (stalled === "request") return new Promise<Response>(() => {});
+
+        const response = json({ id: "scan-6", domain: "example.com", status: "running" });
+        vi.spyOn(response, "json").mockReturnValue(new Promise<unknown>(() => {}));
+        return response;
+      };
+      const client = createClient({ fetch: transport });
+      let outcome: Awaited<ReturnType<typeof client.pollUntilComplete>> | null = null;
+      void client.pollUntilComplete("example.com").then((result) => {
+        outcome = result;
+      });
+
+      await vi.advanceTimersByTimeAsync(299_999);
+      expect(outcome).toBeNull();
+      await vi.advanceTimersByTimeAsync(2);
+      expect(outcome).toMatchObject({
+        ok: false,
+        error: { kind: "operation", message: expect.stringContaining("timed out") },
+      });
+      expect(signals[0]?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+});
+
+it("preserves canceled reports and treats cancellation as a terminal operation", async () => {
+  const canceled = { id: "scan-5", domain: "example.com", status: "canceled" };
+  const client = createClient({ fetch: async (): Promise<Response> => json(canceled) });
+
+  expect(await client.getScanResults("example.com")).toEqual({ ok: true, data: canceled });
+  expect(await client.pollUntilComplete("example.com")).toMatchObject({
+    ok: false,
+    error: { kind: "operation" },
+  });
+});
+
 it("distinguishes a failed scan from a network failure", async () => {
   const failed = createClient({
     fetch: async (): Promise<Response> =>

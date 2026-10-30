@@ -75,8 +75,9 @@ if (started.ok) {
 }
 ```
 
-Starting and polling scans consume API quota. Polling respects server wait
-hints and has a deadline. Set a separate origin or fetch-compatible transport
+Starting and polling scans consume API quota. Polling checks every response,
+respects server wait hints and aborts after five minutes, including stalled
+requests and response decoding. Set a separate origin or fetch-compatible transport
 with `createClient({ baseUrl, fetch })`; each client keeps its own configuration.
 `baseUrl` must be an HTTP(S) origin without credentials, a path, query or fragment.
 

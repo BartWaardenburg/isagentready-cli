@@ -238,7 +238,7 @@ export interface ArAssessment {
 export interface ScanResult {
   id: string;
   domain: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "canceled";
   schema_version?: string;
   contract_version?: string;
   ar_assessment?: ArAssessment;
@@ -408,6 +408,20 @@ export class ApiResponseError extends Error {}
 /** Fetch could not reach the configured API. */
 export class ApiTransportError extends Error {}
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** Checks a scan envelope before its status or polling hint can control a client. */
+export const isScanResult = (value: unknown): value is ScanResult =>
+  isRecord(value) &&
+  typeof value.id === "string" &&
+  typeof value.domain === "string" &&
+  typeof value.status === "string" &&
+  ["pending", "running", "completed", "failed", "canceled"].includes(value.status) &&
+  (value.retry_after === undefined ||
+    (typeof value.retry_after === "number" &&
+      Number.isFinite(value.retry_after) && value.retry_after >= 0));
+
 /** Builds an isolated transport while retaining the CLI's existing API. */
 export const createApiClient = (configuration: ApiClientOptions = {}): ApiClient => {
   let origin: URL;
@@ -464,15 +478,12 @@ export const createApiClient = (configuration: ApiClientOptions = {}): ApiClient
     return query ? `?${query}` : "";
   };
 
-  const getScanResults = (domain: string, options: ScanResultOptions = {}): Promise<ScanResult> => {
+  const getScanResults = (domain: string, options: ScanResultOptions = {}, signal?: AbortSignal): Promise<ScanResult> => {
     const params = new URLSearchParams();
     if (options.failing) params.set("checkpoints", "failing");
     if (options.contract) params.set("include", "contract");
-    return request<ScanResult>(`/api/v1/scan/${encodeURIComponent(domain)}${queryString(params)}`);
+    return request<ScanResult>(`/api/v1/scan/${encodeURIComponent(domain)}${queryString(params)}`, { signal });
   };
-
-  const isRecord = (value: unknown): value is Record<string, unknown> =>
-    typeof value === "object" && value !== null && !Array.isArray(value);
 
   /** Accepts a bare array or an object that holds the array under `key`. */
   const unwrapList = (body: unknown, key: string): Record<string, unknown> => {
@@ -559,31 +570,53 @@ export const createApiClient = (configuration: ApiClientOptions = {}): ApiClient
   ): Promise<ScanResult> => {
     const sleep = options.sleep ?? realSleep;
     const deadline = Date.now() + POLL_DEADLINE_MS;
+    const controller = new AbortController();
+    const timeoutMessage = `Scan timed out after ${POLL_DEADLINE_MS / 1000}s`;
 
-    if (options.firstWaitSeconds !== undefined) await sleep(pollWaitMs(options.firstWaitSeconds));
+    const poll = async (): Promise<ScanResult> => {
+      if (options.firstWaitSeconds !== undefined) await sleep(pollWaitMs(options.firstWaitSeconds));
 
-    while (Date.now() < deadline) {
-      let waitMs: number;
+      while (Date.now() < deadline) {
+        let waitMs: number;
 
-      try {
-        const result = await getScanResults(domain);
+        try {
+          const result = await getScanResults(domain, {}, controller.signal);
 
-        if (result.status === "completed") return result;
-        if (result.status === "failed") throw new Error(`Scan failed for ${domain}`);
+          if (controller.signal.aborted) throw new Error(timeoutMessage);
+          if (!isScanResult(result)) throw new ApiResponseError("Unexpected scan response");
+          if (result.status === "completed") return result;
+          if (result.status === "failed") throw new Error(`Scan failed for ${domain}`);
+          if (result.status === "canceled") throw new Error(`Scan canceled for ${domain}`);
 
-        onProgress?.(result.status);
-        waitMs = pollWaitMs(result.retry_after);
-      } catch (err) {
-        const limited = err instanceof ApiError && err.status === HTTP_TOO_MANY_REQUESTS;
-        const retryMs = limited && err.retryAfter !== null ? err.retryAfter * 1000 : null;
-        if (retryMs === null || Date.now() + retryMs >= deadline) throw err;
-        waitMs = retryMs;
+          onProgress?.(result.status);
+          waitMs = pollWaitMs(result.retry_after);
+        } catch (err) {
+          const limited = err instanceof ApiError && err.status === HTTP_TOO_MANY_REQUESTS;
+          const retryMs = limited && err.retryAfter !== null ? err.retryAfter * 1000 : null;
+          if (retryMs === null || Date.now() + retryMs >= deadline) throw err;
+          waitMs = retryMs;
+        }
+
+        await sleep(waitMs);
       }
 
-      await sleep(waitMs);
-    }
+      throw new Error(timeoutMessage);
+    };
 
-    throw new Error(`Scan timed out after ${POLL_DEADLINE_MS / 1000}s`);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        // Keep abort errors from replacing the operation's timeout result.
+        reject(new Error(timeoutMessage));
+        controller.abort();
+      }, Math.max(0, deadline - Date.now()));
+    });
+
+    try {
+      return await Promise.race([poll(), expired]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
   };
 
   return { getScanResults, listCheckpoints, getCheckpoint, getMethodology, getMethodologyChangelog, getMethodologyScoring, startScan, getRankings, pollUntilComplete };

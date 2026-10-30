@@ -15,6 +15,7 @@ import {
   ApiTransportError,
   ClientConfigError,
   createApiClient,
+  isScanResult,
 } from "./api.js";
 import type {
   ApiClient,
@@ -99,15 +100,10 @@ const changelog = (value: unknown): value is ChangelogDocument =>
   value.changelog.every((entry: unknown) => record(entry) && typeof entry.version === "string");
 const scoring = (value: unknown): value is ScoringDocument =>
   record(value) && typeof value.version === "string";
-const scan = (value: unknown): value is ScanResult =>
-  record(value) &&
-  typeof value.id === "string" &&
-  typeof value.domain === "string" &&
-  ["pending", "running", "completed", "failed"].includes(String(value.status));
 const rankings = (value: unknown): value is RankingsResponse =>
   record(value) &&
   Array.isArray(value.entries) &&
-  value.entries.every(scan) &&
+  value.entries.every(isScanResult) &&
   typeof value.total === "number";
 
 const checked = (value: unknown, validator: (input: string) => string, label: string): string => {
@@ -200,15 +196,15 @@ export const createClient = (options: ClientOptions = {}): Client => {
     getScanResults: (domain, options): Promise<Result<ScanResult>> =>
       execute(
         (api) => api.getScanResults(checked(domain, validateDomain, "domain"), options),
-        scan,
+        isScanResult,
       ),
     startScan: (url): Promise<Result<ScanResult>> =>
-      execute((api) => api.startScan(checked(url, validateUrl, "url")), scan),
+      execute((api) => api.startScan(checked(url, validateUrl, "url")), isScanResult),
     pollUntilComplete: (domain, onProgress, options): Promise<Result<ScanResult>> =>
       execute(
         (api) =>
           api.pollUntilComplete(checked(domain, validateDomain, "domain"), onProgress, options),
-        scan,
+        isScanResult,
       ),
   };
 };

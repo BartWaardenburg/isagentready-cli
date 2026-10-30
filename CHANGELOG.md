@@ -11,6 +11,8 @@
 * keep unavailable headline and category scores distinct from measured zeroes in text output and SDK types.
 * accept HTTP-date Retry-After values and use a valid JSON retry hint when a rate-limit response has no header.
 * reject malformed catalog responses instead of returning an invented empty list.
+* validate every polling response, preserve canceled reports and stop canceled operations.
+* enforce the polling deadline across requests, response decoding and waiting.
 * use the published `isagentready` package name in installation instructions.
 
 ## [0.3.0](https://github.com/BartWaardenburg/isagentready-cli/compare/v0.2.2...v0.3.0) (2026-10-23)
