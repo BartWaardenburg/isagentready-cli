@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.4.0](https://github.com/BartWaardenburg/isagentready-cli/compare/v0.3.0...v0.4.0) (2026-10-30)
+
 ### Features
 
 * add the `isagentready/sdk` import with a typed client for public API reads, scan creation and polling. Methods return a Result and each client has its own origin and transport.
