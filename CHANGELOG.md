@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Features
+
+* add the `isagentready/sdk` import with a typed client for public API reads, scan creation and polling. Methods return a Result and each client has its own origin and transport.
+
+### Bug Fixes
+
+* keep unavailable headline and category scores distinct from measured zeroes in text output and SDK types.
+* accept HTTP-date Retry-After values and use a valid JSON retry hint when a rate-limit response has no header.
+* reject malformed catalog responses instead of returning an invented empty list.
+* use the published `isagentready` package name in installation instructions.
+
 ## [0.3.0](https://github.com/BartWaardenburg/isagentready-cli/compare/v0.2.2...v0.3.0) (2026-10-23)
 
 

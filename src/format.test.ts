@@ -541,3 +541,19 @@ describe("formatVerifyReport", () => {
     expect(result).toContain("isagentready results example.com --checkpoint ia.a2a-agent-card");
   });
 });
+
+it("shows unavailable headline and category scores without turning them into zero", () => {
+  const incomplete = scan({ overall_score: null, letter_grade: null });
+  incomplete.categories![0]!.score = null;
+  const output = strip(formatScanResult(incomplete));
+  expect(output).toContain("Score unavailable");
+  expect(output).toMatch(/AI Content Discovery.*score unavailable/);
+  expect(output).not.toContain("0/100");
+  expect(strip(formatScanResult(scan({ overall_score: 0, letter_grade: "F", categories: [] })))).toContain("0/100");
+});
+
+it("keeps unavailable ranking scores distinct from a measured zero", () => {
+  const output = strip(formatRankings({ entries: [scan({ overall_score: null, letter_grade: null }), scan({ domain: "zero.example", overall_score: 0, letter_grade: "F" })], total: 2, page: 1, per_page: 25, total_pages: 1 }));
+  expect(output).toMatch(/unavailable\s+example.com/);
+  expect(output).toMatch(/0\/100\s+zero.example/);
+});
