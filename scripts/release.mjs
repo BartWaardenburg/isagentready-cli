@@ -11,6 +11,9 @@ import { bumpVersion, releaseChangelog, releaseNotes, setPackageVersion } from "
 const PACKAGE = "isagentready";
 const REPO_URL = "https://github.com/BartWaardenburg/isagentready-cli";
 const BASE = "main";
+const AVAILABILITY_TIMEOUT_MS = 15 * 60 * 1000;
+const AVAILABILITY_POLL_MS = 10 * 1000;
+const REGISTRY_REQUEST_TIMEOUT_MS = 30 * 1000;
 
 const run = (cmd, args, opts = {}) =>
   execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...opts }).trim();
@@ -35,7 +38,12 @@ const requireCleanBase = () => {
   if (run("git", ["branch", "--show-current"]) !== BASE) fail(`check out ${BASE} first.`);
   if (run("git", ["status", "--porcelain"]) !== "") fail("the working tree is not clean.");
   run("git", ["fetch", "--quiet", "origin", BASE, "--tags"]);
-  const [behind, ahead] = run("git", ["rev-list", "--left-right", "--count", `origin/${BASE}...HEAD`]).split(/\s+/);
+  const [behind, ahead] = run("git", [
+    "rev-list",
+    "--left-right",
+    "--count",
+    `origin/${BASE}...HEAD`,
+  ]).split(/\s+/);
   if (behind !== "0") fail(`${BASE} is behind origin/${BASE}. Run git pull --ff-only.`);
   if (ahead !== "0") fail(`${BASE} has local commits that are not on origin/${BASE}.`);
 };
@@ -64,7 +72,12 @@ const prepare = (spec) => {
   if (isPublished(version)) fail(`${PACKAGE}@${version} is already on npm.`);
 
   const date = new Date().toISOString().slice(0, 10);
-  const changelog = releaseChangelog(readFileSync("CHANGELOG.md", "utf8"), { version, previous, date, repoUrl: REPO_URL });
+  const changelog = releaseChangelog(readFileSync("CHANGELOG.md", "utf8"), {
+    version,
+    previous,
+    date,
+    repoUrl: REPO_URL,
+  });
   verifyBuild();
 
   step(`release branch ${branch}`);
@@ -76,18 +89,64 @@ const prepare = (spec) => {
   runLoud("git", ["push", "-u", "origin", branch]);
 
   const body = `## Summary\n\nRelease ${tag}.\n\n${releaseNotes(changelog, version)}\n\nAfter the merge, run \`pnpm release publish\` on ${BASE}.`;
-  const url = run("gh", ["pr", "create", "--base", BASE, "--head", branch, "--title", `chore(release): ${tag}`, "--body", body]);
+  const url = run("gh", [
+    "pr",
+    "create",
+    "--base",
+    BASE,
+    "--head",
+    branch,
+    "--title",
+    `chore(release): ${tag}`,
+    "--body",
+    body,
+  ]);
   run("git", ["checkout", BASE]);
-  console.log(`\nRelease PR: ${url}\nMerge it, then run: git pull --ff-only && pnpm release publish`);
+  console.log(
+    `\nRelease PR: ${url}\nMerge it, then run: git pull --ff-only && pnpm release publish`,
+  );
 };
 
-const publish = () => {
+const waitForAvailability = async (version) => {
+  step(`waiting for npm to make ${PACKAGE}@${version} available as latest`);
+  const deadline = Date.now() + AVAILABILITY_TIMEOUT_MS;
+  let latest = "unavailable";
+  while (true) {
+    try {
+      latest = run("npm", ["view", PACKAGE, "dist-tags.latest", "--prefer-online"], {
+        timeout: REGISTRY_REQUEST_TIMEOUT_MS,
+      });
+      if (
+        latest === version &&
+        run("npm", ["view", `${PACKAGE}@${version}`, "version", "--prefer-online"], {
+          timeout: REGISTRY_REQUEST_TIMEOUT_MS,
+        }) === version
+      )
+        return;
+    } catch {
+      latest = "unavailable";
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      throw new Error(
+        `npm accepted the release but it is not available as latest yet (observed ${latest}). Check npm publish-time scanning before retrying.`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.min(AVAILABILITY_POLL_MS, remaining)));
+  }
+};
+
+const publish = async () => {
   requireCleanBase();
   const version = packageVersion();
   const tag = `v${version}`;
   const notes = releaseNotes(readFileSync("CHANGELOG.md", "utf8"), version);
-  if (!run("git", ["log", "--format=%s", `-n`, "50"]).split("\n").includes(`chore(release): ${tag}`)) {
-    fail(`${BASE} has no "chore(release): ${tag}" commit. Run prepare and merge the release PR first.`);
+  if (
+    !run("git", ["log", "--format=%s", `-n`, "50"]).split("\n").includes(`chore(release): ${tag}`)
+  ) {
+    fail(
+      `${BASE} has no "chore(release): ${tag}" commit. Run prepare and merge the release PR first.`,
+    );
   }
   if (succeeds("npm", ["whoami"]) === false) fail("npm is not logged in. Run npm login.");
   verifyBuild();
@@ -114,15 +173,14 @@ const publish = () => {
     runLoud("gh", ["release", "create", tag, "--title", tag, "--notes", notes, "--verify-tag"]);
   }
 
-  const live = run("npm", ["view", PACKAGE, "dist-tags.latest"]);
-  if (live !== version) fail(`npm latest is ${live}, not ${version}.`);
+  await waitForAvailability(version);
   console.log(`\nReleased ${PACKAGE}@${version}: npm latest, tag ${tag}, GitHub release.`);
 };
 
 const [command, arg] = process.argv.slice(2);
 try {
   if (command === "prepare") prepare(arg);
-  else if (command === "publish") publish();
+  else if (command === "publish") await publish();
   else fail("usage: release.mjs prepare <patch|minor|major|x.y.z> | publish");
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));
