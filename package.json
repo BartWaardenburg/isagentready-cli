@@ -61,5 +61,11 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "exports": {
+    "./sdk": {
+      "types": "./dist/sdk.d.ts",
+      "import": "./dist/sdk.js"
+    }
   }
 }

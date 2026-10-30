@@ -101,9 +101,10 @@ const fixLines = (fix: Fix | undefined, verify: Verify | undefined, domain: stri
 };
 
 const headerLines = (scan: ScanResult): string[] => {
-  const score = scan.overall_score ?? 0;
+  const score = scan.overall_score;
   const grade = scan.letter_grade ?? "?";
-  const lines = ["", `  ${gradeBg(grade)(` ${grade} `)}  ${bold(scan.domain)}  ${scoreColor(score)(String(score))}/100`];
+  const display = typeof score === "number" ? `${scoreColor(score)(String(score))}/100` : dim("Score unavailable");
+  const lines = ["", `  ${gradeBg(grade)(` ${grade} `)}  ${bold(scan.domain)}  ${display}`];
   if (scan.scan_duration_ms) {
     lines.push(dim(`  Scanned in ${(scan.scan_duration_ms / 1000).toFixed(1)}s`));
   }
@@ -135,10 +136,14 @@ export const formatScanResult = (scan: ScanResult, verbose = false): string => {
     lines.push("");
 
     for (const cat of scan.categories) {
-      const pct = cat.max_score > 0 ? Math.round((cat.score / cat.max_score) * 100) : 0;
-      lines.push(
-        `  ${scoreBar(cat.score, cat.max_score, 15)} ${pad(scoreColor(pct)(`${pct}%`), 12)} ${white(cat.label)} ${dim(`(${cat.weight}% weight)`)}`
-      );
+      if (typeof cat.score === "number") {
+        const pct = cat.max_score > 0 ? Math.round((cat.score / cat.max_score) * 100) : 0;
+        lines.push(
+          `  ${scoreBar(cat.score, cat.max_score, 15)} ${pad(scoreColor(pct)(`${pct}%`), 12)} ${white(cat.label)} ${dim(`(${cat.weight}% weight)`)}`
+        );
+      } else {
+        lines.push(`  ${white(cat.label)} ${dim("score unavailable")}`);
+      }
 
       if (verbose && cat.checkpoints?.length) {
         for (const cp of cat.checkpoints) {
@@ -401,10 +406,11 @@ export const formatRankings = (data: RankingsResponse): string => {
     const scan = data.entries[i]!;
     const rank = startRank + i + 1;
     const grade = scan.letter_grade ?? "?";
-    const score = scan.overall_score ?? 0;
+    const score = scan.overall_score;
+    const display = typeof score === "number" ? scoreColor(score)(String(score) + "/100") : dim("unavailable");
 
     lines.push(
-      `  ${pad(dim(String(rank)), 5)} ${pad(gradeBg(grade)(` ${grade} `), 12)} ${pad(scoreColor(score)(String(score) + "/100"), 10)} ${white(scan.domain)}`
+      `  ${pad(dim(String(rank)), 5)} ${pad(gradeBg(grade)(` ${grade} `), 12)} ${pad(display, 10)} ${white(scan.domain)}`
     );
   }
 

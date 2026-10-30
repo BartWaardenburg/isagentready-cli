@@ -1,4 +1,4 @@
-# @isagentready/cli
+# isagentready
 
 Scan any website for AI agent readiness from your terminal. Get scores, letter grades, and fix steps for each checkpoint. Run `isagentready checkpoints` for the live list of checkpoints.
 
@@ -22,14 +22,64 @@ $ isagentready scan example.com
 ## Install
 
 ```bash
-npm install -g @isagentready/cli
+npm install -g isagentready
 ```
 
 Or use directly with npx:
 
 ```bash
-npx @isagentready/cli scan example.com
+npx isagentready scan example.com
 ```
+
+## SDK
+
+The same package also provides a typed SDK for Node.js 18 and later. Import
+`isagentready/sdk` to use it without starting the CLI.
+
+```bash
+npm install isagentready
+```
+
+```javascript
+import { createClient } from "isagentready/sdk";
+
+const client = createClient();
+const result = await client.getCheckpoint("ia.robots-txt");
+
+if (result.ok) {
+  console.log(result.data.name, result.data.fix?.summary);
+} else {
+  console.error(result.error.message, result.error.retryAfter);
+}
+```
+
+Each method returns `{ ok: true, data }` or `{ ok: false, error }`. Errors
+include `kind`, `message`, HTTP `status` when available, and a `retryAfter`
+wait in seconds when the server supplies one. The SDK checks response envelopes;
+it does not certify report content or execute checkpoint verification commands.
+Unavailable scores remain `null`, distinct from measured zeroes.
+
+Use `getScanResults(domain, { contract: true })` to read a cached report.
+`listCheckpoints`, `getCheckpoint`, `getMethodology`,
+`getMethodologyChangelog`, `getMethodologyScoring` and `getRankings` read the
+public API. These calls need no API key. `getScanResults` accepts
+`{ failing: true }`, and `listCheckpoints` accepts the CLI's catalog filters.
+
+```javascript
+const started = await client.startScan("https://example.com");
+if (started.ok) {
+  const report = await client.pollUntilComplete(started.data.domain, undefined, {
+    firstWaitSeconds: started.data.retry_after,
+  });
+  if (report.ok) console.log(report.data.overall_score);
+}
+```
+
+Starting and polling scans consume API quota. Polling checks every response,
+respects server wait hints and aborts after five minutes, including stalled
+requests and response decoding. Set a separate origin or fetch-compatible transport
+with `createClient({ baseUrl, fetch })`; each client keeps its own configuration.
+`baseUrl` must be an HTTP(S) origin without credentials, a path, query or fragment.
 
 ## Commands
 
