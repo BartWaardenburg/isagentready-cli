@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.4.1](https://github.com/BartWaardenburg/isagentready-cli/compare/v0.4.0...v0.4.1) (2026-11-02)
+
 ### Bug Fixes
 
 * cancel the active polling wait when the SDK operation times out, so Node can exit immediately.
