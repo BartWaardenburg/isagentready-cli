@@ -553,7 +553,17 @@ export const createApiClient = (configuration: ApiClientOptions = {}): ApiClient
   const POLL_DEADLINE_MS = 5 * 60 * 1000;
 
 
-  const realSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+  const realSleep = (ms: number, signal: AbortSignal): Promise<void> =>
+    new Promise((resolve) => {
+      const finish = (): void => {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", finish);
+        resolve();
+      };
+      const timer = setTimeout(finish, ms);
+      signal.addEventListener("abort", finish, { once: true });
+      if (signal.aborted) finish();
+    });
 
   const pollWaitMs = (seconds: number | undefined): number =>
     Math.min(Math.max(seconds ?? DEFAULT_POLL_SECONDS, 1), MAX_POLL_SECONDS) * 1000;
@@ -568,9 +578,9 @@ export const createApiClient = (configuration: ApiClientOptions = {}): ApiClient
     onProgress?: (status: string) => void,
     options: PollOptions = {}
   ): Promise<ScanResult> => {
-    const sleep = options.sleep ?? realSleep;
     const deadline = Date.now() + POLL_DEADLINE_MS;
     const controller = new AbortController();
+    const sleep = options.sleep ?? ((ms: number): Promise<void> => realSleep(ms, controller.signal));
     const timeoutMessage = `Scan timed out after ${POLL_DEADLINE_MS / 1000}s`;
 
     const poll = async (): Promise<ScanResult> => {

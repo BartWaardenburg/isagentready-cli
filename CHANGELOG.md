@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Bug Fixes
+
+* cancel the active polling wait when the SDK operation times out, so Node can exit immediately.
+* resume an accepted npm publication during its visibility delay without hiding authentication failures.
+
 ## [0.4.0](https://github.com/BartWaardenburg/isagentready-cli/compare/v0.3.0...v0.4.0) (2026-10-30)
 
 ### Features

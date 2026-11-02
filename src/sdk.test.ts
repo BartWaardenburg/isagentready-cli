@@ -289,6 +289,25 @@ it("bounds stalled poll requests and response decoding by the polling deadline",
   }
 });
 
+it("cancels the native polling wait when its deadline expires", async () => {
+  vi.useFakeTimers();
+  try {
+    const client = createClient({
+      fetch: async (): Promise<Response> =>
+        json({ id: "scan-wait", domain: "example.com", status: "running", retry_after: 59 }),
+    });
+    const operation = client.pollUntilComplete("example.com");
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(await operation).toMatchObject({
+      ok: false,
+      error: { kind: "operation", message: expect.stringContaining("timed out") },
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("preserves canceled reports and treats cancellation as a terminal operation", async () => {
   const canceled = { id: "scan-5", domain: "example.com", status: "canceled" };
   const client = createClient({ fetch: async (): Promise<Response> => json(canceled) });
