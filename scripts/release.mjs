@@ -4,8 +4,9 @@
 //   node scripts/release.mjs publish                             after the merge: npm, tag, GitHub release
 // Each publish step checks its own state first, so a second run after a failure is safe.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import { stripVTControlCharacters } from "node:util";
 import { bumpVersion, releaseChangelog, releaseNotes, setPackageVersion } from "./release-lib.mjs";
 
 const PACKAGE = "isagentready";
@@ -14,6 +15,7 @@ const BASE = "main";
 const AVAILABILITY_TIMEOUT_MS = 15 * 60 * 1000;
 const AVAILABILITY_POLL_MS = 10 * 1000;
 const REGISTRY_REQUEST_TIMEOUT_MS = 30 * 1000;
+const MAX_PUBLISH_ERROR_CHARACTERS = 16_384;
 
 const run = (cmd, args, opts = {}) =>
   execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], ...opts }).trim();
@@ -60,6 +62,30 @@ const tagExists = (tag) =>
   run("git", ["ls-remote", "--tags", "origin", `refs/tags/${tag}`]) !== "";
 
 const isPublished = (version) => succeeds("npm", ["view", `${PACKAGE}@${version}`, "version"]);
+
+const publishPackage = (version) =>
+  new Promise((resolve, reject) => {
+    // npm checks stdin/stdout for interactive authentication; keep both attached.
+    const child = spawn("npm", ["publish"], { stdio: ["inherit", "inherit", "pipe"] });
+    let errors = "";
+    child.stderr.on("data", (chunk) => {
+      process.stderr.write(chunk);
+      errors = (errors + chunk.toString()).slice(-MAX_PUBLISH_ERROR_CHARACTERS);
+    });
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      const plain = stripVTControlCharacters(errors);
+      const authFailure = /\b(EOTP|ENEEDAUTH|E401)\b/.test(plain);
+      const conflict =
+        /\bEPUBLISHCONFLICT\b/.test(plain) ||
+        plain.includes(`You cannot publish over the previously published versions: ${version}.`);
+      if (code === 0 || (!signal && !authFailure && conflict)) {
+        resolve();
+        return;
+      }
+      reject(new Error(plain.trim() || `npm publish exited with ${signal ?? code}`));
+    });
+  });
 
 const prepare = (spec) => {
   if (!spec) fail("usage: release.mjs prepare <patch|minor|major|x.y.z>");
@@ -155,7 +181,7 @@ const publish = async () => {
     step(`${PACKAGE}@${version} is already on npm, skip publish`);
   } else {
     step(`npm publish ${PACKAGE}@${version} (npm asks for 2FA in the browser or terminal)`);
-    runLoud("npm", ["publish"]);
+    await publishPackage(version);
   }
 
   if (tagExists(tag)) {
