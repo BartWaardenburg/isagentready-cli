@@ -39,12 +39,14 @@ describe("packed SDK", () => {
             { cwd: root },
           ),
         );
+        // npm 11 prints an array of results, npm 12 prints an object keyed by package name.
+        const [packResult] = Array.isArray(packed) ? packed : Object.values(packed);
         const consumer = join(temporary, "consumer");
         const installed = join(consumer, "node_modules/isagentready");
         mkdirSync(installed, { recursive: true });
         await run("tar", [
           "-xzf",
-          join(temporary, packed[0].filename),
+          join(temporary, packResult.filename),
           "-C",
           installed,
           "--strip-components=1",
